@@ -1,0 +1,771 @@
+# SPRINTS.md — CareerForge AI: CV Generation SaaS
+
+**Document Version:** 1.0.0
+**Date:** September 22, 2026
+**Status:** Implementation Blueprint
+
+---
+
+## Part A: Engineering the Generic Master Prompt
+
+### A.1 Problems with the Current Master Prompt
+
+The current `docs/master_prompt.md` is a great template but is **hardcoded to Nicolus Rotich, PhD** and carries assumptions that break for other users:
+
+1. **Identity-specific data** (name, location, phone, LinkedIn URL, specific thesis title) — not reusable.
+2. **Hardcoded translation directive** ("Translate Quant to Industry/Academia") — only relevant for someone moving from quant finance to physical engineering; a user going from academia to tech, or marketing to SaaS, needs a different bridge.
+3. **Single-sector framing** — the "Key Relevance to [Job Sector]" line is hardcoded to physical/chemical roles; the prompt should let the LLM infer the relevant bridge generically.
+4. **Missing structural requirements** that a true SaaS would need:
+   - No explicit instruction to handle different CV lengths (1-page, 2-page, academic 3+ page).
+   - No instruction for handling employment gaps, career changes, or short-term contracts.
+   - No instruction for tailoring skill hierarchy (most relevant first vs. chronological).
+   - No explicit instruction to normalize different input formats (PDF parse artifacts, OCR errors, raw bullet lists) into clean output.
+   - No fallback behavior when the master profile is incomplete (e.g., missing dates, missing company names).
+   - No instruction for multi-language output (a real SaaS feature).
+   - No tone calibration (executive vs. junior vs. academic vs. creative).
+
+### A.2 Generic Master Prompt Design (Template with Slot Placeholders)
+
+The prompt MUST be fully parameterized at runtime. The system substitutes placeholders from the user's master profile JSON and the job description before sending to the LLM.
+
+Below is the **production master prompt template**. All `[PLACEHOLDER]` tokens are replaced server-side.
+
+```
+ACT AS AN EXPERT EXECUTIVE RECRUITER, HIRING MANAGER, AND ATS OPTIMIZATION SPECIALIST.
+
+I will provide my MASTER PROFILE and a TARGET JOB DESCRIPTION. Your task is to generate two tailored, highly polished application documents:
+
+1. An ATS-compliant, single-column CV
+2. A compelling, single-page Cover Letter
+
+--------------------------------------------------------------------------------
+
+### MY MASTER PROFILE
+
+[PROFILE_SECTION — filled from user's master profile JSON]
+
+Contact Information:
+  Name: [USER_FULL_NAME]
+  Location: [USER_LOCATION]
+  Contact: [USER_PHONE] | [USER_EMAIL]
+  LinkedIn: [USER_LINKEDIN] (if provided)
+
+Education:
+[EDUCATION_ENTRIES — each entry: degree, institution, location, dates, thesis/dissertation if academic, relevant coursework/honors]
+
+Core Technical Competencies:
+[TECHNICAL_SKILLS — grouped by domain; each domain is a bullet list of specific skills, tools, and technologies]
+
+Professional Experience:
+[WORK_EXPERIENCE_ENTRIES — each entry: role title, company, location, dates, 3-6 bullet points of achievements and responsibilities, quantified outcomes where available]
+
+ Publications / Portfolio / Projects (if applicable):
+[OPTIONAL_SECTION — publications with full citation, portfolio links, notable projects with tech stack]
+
+ Additional Information (if provided):
+  Languages: [LANGUAGES_WITH_PROFICIENCY]
+  Certifications: [CERTIFICATIONS_WITH_ISSUING_BODY_AND_DATES]
+  Awards/Honors: [AWARDS_WITH_DATES]
+  Volunteer/Community: [OPTIONAL]
+
+--------------------------------------------------------------------------------
+
+### INSTRUCTIONS FOR REWRITING
+
+#### 1. Keyword Extraction & Matching
+Analyze the Job Description below. Extract:
+  - Primary required skills (hard skills, tools, platforms, languages)
+  - Secondary/desirable skills
+  - Soft skills and behavioral traits
+  - Domain/industry keywords
+  - Required education or certifications
+
+Integrate these keywords NATURALLY into both documents. Do NOT keyword-stuff. Every keyword integration must be contextually honest based on the master profile.
+
+#### 2. Role Translation & Relevance Bridging
+Analyze how each role in the master profile maps to the target job. For roles that are NOT obviously aligned:
+  - Identify transferable skills, methodologies, and outcomes
+  - Add a concise "Relevance to [Target Role/Domain]" note under that role (1 line, max 2 lines)
+  - Frame achievements in language that the target industry would value
+
+Do NOT invent skills or experiences the user does not have. If a target requirement cannot be honestly matched, omit it rather than fabricate.
+
+#### 3. CV Construction Rules
+  - SINGLE-COLUMN layout. No tables, no text boxes, no multi-column frames.
+  - Standard section headers (use the exact header names listed in Section 6 of the ATS Compliance Rules, below).
+  - Clear reverse-chronological order for experience and education.
+  - Each experience entry: Role Title, Company, Location, Dates (Month Year – Month Year or Month Year – Present), 3–6 bullet points.
+  - Bullet points: start with a strong action verb, include a quantified outcome where the data exists, include relevant keywords naturally.
+  - Length guidance:
+      * If target job is a standard industry role: target 1–2 pages.
+      * If target job is academic/research: allow 2–3+ pages with full publication list.
+      * If the master profile is sparse: do NOT pad with filler; keep it honest and concise.
+  - Include a "Professional Summary" section (3–4 lines) at the top, tailored to the target role, synthesized from the most relevant parts of the profile.
+  - Include a "Core Competencies" or "Skills" section near the top (6–12 items, comma-separated or short bullets), prioritizing skills that match the job description.
+  - If the user has publications, include a "Selected Publications" or "Publications" section; format citations consistently (choose one citation style and apply uniformly).
+  - If the user has provided certifications, include a "Certifications" section.
+  - If the user has provided languages, include a "Languages" section.
+
+#### 4. Cover Letter Construction Rules
+  - ONE PAGE maximum. Approx. 250–400 words.
+  - Opening paragraph: Strong, specific motivation hook — WHY this company, WHY this role, what specifically attracts the candidate. Reference something specific from the job description or company context. Do NOT open with "I am writing to apply for..."
+  - Second paragraph: Technical alignment — map 2–3 specific areas of the candidate's background to the job's core requirements. Use concrete examples (projects, outcomes, technologies) from the master profile.
+  - Third paragraph: Soft skills / working style / value-add — what the candidate brings beyond technical fit (leadership, mentorship, cross-functional coordination, problem-solving approach).
+  - Closing paragraph: Brief, confident call to action. Express enthusiasm for the opportunity.
+  - Professional sign-off.
+
+#### 5. Tone Calibration
+  - The tone should match the target role's level and industry:
+      * Executive / senior leadership: authoritative, strategic, concise, outcome-focused.
+      * Mid-level individual contributor: confident, technically precise, achievement-oriented.
+      * Junior / entry-level: eager, growth-minded, highlight potential and transferable foundation.
+      * Academic / research: rigorous, publication-and-methodology-focused, formal.
+      * Creative / marketing / product: energetic, narrative-driven, highlight impact and ownership.
+  - If the user has indicated a preferred tone, honor it. Otherwise, infer from the target role.
+
+#### 6. ATS Compliance Rules (MANDATORY for CV output)
+  - Single-column, linear text flow. No floating elements.
+  - Standard, recognizable section headers ONLY:
+      * "PROFESSIONAL SUMMARY" or "SUMMARY"
+      * "PROFESSIONAL EXPERIENCE" or "WORK EXPERIENCE" or "EXPERIENCE"
+      * "EDUCATION"
+      * "SKILLS" or "CORE COMPETENCIES" or "TECHNICAL SKILLS"
+      * "PUBLICATIONS" (if applicable)
+      * "CERTIFICATIONS" (if applicable)
+      * "LANGUAGES" (if applicable)
+      * "PROJECTS" (if applicable)
+  - No tables, no text boxes, no columns, no headers/footers with critical content, no images/graphics.
+  - Standard web-safe fonts only (Calibri, Arial, Helvetica, Georgia, Times New Roman).
+  - No special characters that could corrupt parsing (avoid em-dashes in headers, avoid non-ASCII where a safe equivalent exists).
+  - Date format: "MMM YYYY" or "Month YYYY" (e.g., "Feb 2019 – Present"). Avoid ambiguous formats.
+  - File output format: .docx (primary), .pdf (derived from .docx — never a scanned/image PDF).
+
+#### 7. Handling Incomplete or Ambiguous Profile Data
+  - If a work experience entry is missing dates, use the format "[Dates not specified]" and flag it in the output metadata.
+  - If a company name is missing, use "[Company name not specified]".
+  - If a skill is listed without a proficiency level, do not invent one.
+  - If the master profile is missing a section the job description emphasizes, do NOT fabricate — note in metadata that this section is absent from the profile.
+
+#### 8. Output Format Requirements
+  - Return the CV as structured JSON matching the CV_SCHEMA (see below), NOT as free text. This allows deterministic document rendering.
+  - Return the Cover Letter as structured JSON matching the COVER_LETTER_SCHEMA.
+  - Include a METADATA object with:
+      * keyword_match_score (integer 0–100: how well the CV matches the job description keywords)
+      * missing_keywords (list of important JD keywords not found in the profile)
+      * profile_completeness_score (integer 0–100)
+      * generation_notes (any warnings, e.g., "Publication dates missing", "Profile has no certifications section")
+
+#### 9. CV_SCHEMA (JSON output specification)
+{
+  "summary": "string — 3–4 line professional summary, tailored to target role",
+  "skills": ["string"],  // 6–12 short skill labels, prioritized by JD relevance
+  "experience": [
+    {
+      "role": "string",
+      "company": "string",
+      "location": "string",
+      "start_date": "string (MMM YYYY or 'Present')",
+      "end_date": "string (MMM YYYY or 'Present')",
+      "relevance_note": "string — optional 1-line relevance bridge (include only if role is not obviously aligned)",
+      "bullets": ["string"]  // 3–6 bullets
+    }
+  ],
+  "education": [
+    {
+      "degree": "string",
+      "institution": "string",
+      "location": "string",
+      "start_date": "string",
+      "end_date": "string",
+      "thesis": "string — optional",
+      "details": ["string"]  // optional honors, coursework, achievements
+    }
+  ],
+  "publications": [
+    {
+      "citation": "string — full citation in consistent format",
+      "year": "integer",
+      "doi": "string — optional"
+    }
+  ],
+  "certifications": [
+    {
+      "name": "string",
+      "issuer": "string",
+      "year": "integer — optional"
+    }
+  ],
+  "languages": [
+    {
+      "language": "string",
+      "proficiency": "string"
+    }
+  ],
+  "projects": [
+    {
+      "name": "string",
+      "description": "string",
+      "tech_stack": ["string"],
+      "link": "string — optional"
+    }
+  ]
+}
+
+#### 10. COVER_LETTER_SCHEMA (JSON output specification)
+{
+  "header": {
+    "candidate_name": "string",
+    "candidate_contact": "string",
+    "date": "string (YYYY-MM-DD)",
+    " hiring_manager_name": "string — optional, use 'Hiring Team' if unknown",
+    " company_name": "string",
+    " job_title": "string"
+  },
+  "salutation": "string — e.g., 'Dear [Name],' or 'Dear Hiring Team,'",
+  "paragraphs": ["string"],  // 3–4 paragraphs, each a complete, polished paragraph
+  "closing": "string — e.g., 'Sincerely,'",
+  "signature": "string — candidate name"
+}
+
+--------------------------------------------------------------------------------
+
+### JOB DESCRIPTION
+
+[JOB_DESCRIPTION_TEXT — pasted by the user at generation time]
+
+--------------------------------------------------------------------------------
+
+### OUTPUT
+
+Respond with TWO JSON objects — CV JSON first, then COVER_LETTER JSON — separated by a clear delimiter line: "---COVER_LETTER_BEGIN---"
+
+Do NOT include any text outside the JSON objects and the delimiter. Do NOT add commentary, explanations, or markdown formatting around the JSON.
+```
+
+### A.3 Runtime Prompt Assembly
+
+At generation time, the backend assembles the prompt as follows:
+
+1. Load the user's `master_profile` (JSONB from DB).
+2. Load any user-customized prompt overrides from `master_profiles.master_prompt_text` (if the user has edited their prompt).
+3. Load the target job description from the generation request body.
+4. Fill all `[PLACEHOLDER]` tokens in the template above with actual profile data.
+5. If the profile section is empty (e.g., no publications), emit the section header with a note "(not provided)" so the LLM knows to omit it.
+6. Send the assembled prompt to the configured LLM provider via the Unified LLM Adapter.
+7. Parse the JSON response against `CV_SCHEMA` and `COVER_LETTER_SCHEMA` using a JSON schema validator (e.g., `pydantic` or `jsonschema`).
+8. On parse failure: retry up to 3 times with an error-correction prompt that includes the validation errors.
+
+### A.4 User-Customizable Prompt Overrides
+
+The spec's `master_profiles.master_prompt_text` column supports per-profile prompt overrides. The override system:
+
+- If `master_prompt_text` is non-null for a profile, use it as the full prompt instead of the template.
+- If a user wants partial customization (e.g., just add an extra instruction), the UI should offer a "Prompt Customization" panel with a textarea and a "Use Custom Prompt" toggle, with a fallback to the default template.
+- The override capability is essential for power users (e.g., academics who want specific citation formats, or users targeting a very specific niche).
+
+---
+
+## Part B: Industry-Standard Gaps to Add
+
+The spec document is thorough on core architecture but misses several production-critical pieces. These are added below and reflected in the sprint breakdown.
+
+### B.1 Security & Production Hardening (Missing from Spec)
+
+| Area | What's Missing | What to Add |
+|---|---|---|
+| **API Key Encryption** | Spec mentions AES-256-GCM but no key management strategy | Use a dedicated key management service (AWS KMS, GCP KMS, or HashiCorp Vault for self-hosted). The encryption key itself must never be in the DB or codebase. |
+| **Rate Limiting** | Not mentioned anywhere | Per-user rate limits on generation endpoints (e.g., 10 requests/minute for free/trial, 60/minute for paid). Use Redis-backed sliding window. Also limits on LLM API calls per minute to prevent runaway bills. |
+| **Input Sanitization** | Not mentioned | All user-provided text (job descriptions, profile entries, custom prompts) must be sanitized before storage and before injection into LLM prompts. Strip or escape control characters. Profile PDF/DOCX imports must be parsed with content validation (no embedded scripts, no macro execution). |
+| **Stripe Webhook Security** | Spec mentions webhook endpoint but not signature verification | Every Stripe webhook must be verified with `stripe.Webhook.construct_event` using the webhook secret. Reject any event with an invalid signature. Also handle duplicate events idempotently (Stripe can retry). |
+| **CORS Policy** | Not mentioned | Explicit CORS allowlist for the frontend origin(s). In production, do NOT use `allow_origins=["*"]`. |
+| **Authentication Token Management** | Spec mentions JWT but no rotation, refresh, or revocation strategy | Short-lived access tokens (15–60 min) + refresh tokens (7–30 days, rotated on use). Revoke refresh tokens on password change and subscription cancellation. |
+| **Audit Logging** | Not mentioned | Log all generation requests (who, what job description, which LLM provider, token usage, result status) to an append-only audit table. Required for billing disputes, abuse investigation, and compliance. |
+| **Abuse Prevention** | Not mentioned | Detect and block: job descriptions that are clearly not real (e.g., extremely short, non-sensical, or containing LLM-generated text that looks like a prompt injection attempt). Rate-limit generation requests that use suspiciously similar job descriptions repeatedly. |
+
+### B.2 Document Generation Gaps
+
+| Area | What's Missing | What to Add |
+|---|---|---|
+| **PDF Generation** | Spec mentions WeasyPrint/fpdf2 but no detail | For pixel-perfect ATS-safe PDFs: generate the .docx first with `python-docx`, then convert to PDF using a headless LibreOffice conversion (`libreoffice --headless --convert-to pdf`) or `docx2pdf` (Windows/macOS) — this preserves exact font metrics and layout. WeasyPrint from HTML is an alternative but risks subtle layout drift vs. what the user sees in Word. |
+| **DOCX Template Quality** | Not detailed | The .docx must use real styles (Heading 1, Normal, etc.) so that Word users can further edit it. Set proper margins (1 inch / 2.54 cm), font (Calibri 10.5–11pt for body, larger for name/header), and line spacing (1.0–1.15). The document must open cleanly in Microsoft Word, Google Docs, and LibreOffice. |
+| **Multi-format Export** | Spec lists DOCX, PDF, Markdown for higher tiers | Markdown export is a real feature: serialize the CV JSON to clean Markdown (useful for GitHub profile READMEs, Notion imports, and plain-text applications). Bulk ZIP export for team tiers: generate all queued jobs and package as a ZIP. |
+| **Document Preview** | Spec mentions @react-pdf/renderer or PDF.js | In-browser preview: for DOCX, convert to PDF server-side and preview with PDF.js; for a lighter-weight preview, render the JSON to an HTML preview (single-column, styled to resemble a CV) using React server components. |
+
+### B.3 Billing & Subscription Gaps
+
+| Area | What's Missing | What to Add |
+|---|---|---|
+| **Credit/Pay-Per-Set Implementation** | Spec describes the tier but not the mechanics | Pay-per-set: user purchases a bundle of credits (e.g., 3 credits for $11.97 = $3.99/set). Each successful generation consumes 1 credit. Credits expire after 12 months. Implement as Stripe Products with recurring vs. one-time payment types. Metered billing for overages on team plans. |
+| **Invoice & Receipt Generation** | Not mentioned | Generate PDF invoices for subscription renewals and credit purchases. Store in S3, make downloadable from the billing dashboard. Required for business users expensing their subscription. |
+| **Dunning Management** | Not mentioned | Handle failed payments gracefully: retry schedule (day 1, day 3, day 7), account downgrade to read-only on final failure, email notifications at each stage. |
+| **Tax Handling** | Not mentioned | For SaaS with international users, integrate Stripe Tax or similar to handle VAT/sales tax based on user location. Display tax-inclusive pricing where required by law. |
+
+### B.4 Email & Notifications
+
+| Area | What's Missing | What to Add |
+|---|---|---|
+| **Transactional Email** | Not mentioned at all | Need an email service (SendGrid, Postmark, Resend, or AWS SES). Required emails: signup verification, password reset, trial expiration warning (day 12), trial expired, payment receipt, subscription renewal reminder, generation completion notification, team invitation. |
+| **Email Templates** | Not mentioned | All emails must have branded templates (logo, colors matching the app, proper plain-text fallback for email clients that block HTML). |
+| **In-App Notifications** | Not mentioned | Toast/banner notifications in the UI for: generation complete, trial expiring, payment failed, team invite accepted. Use a lightweight notifications table or WebSocket broadcast. |
+
+### B.5 DevOps & Observability Gaps
+
+| Area | What's Missing | What to Add |
+|---|---|---|
+| **Error Tracking** | Not mentioned | Integrate Sentry (or self-hosted equivalent) for frontend and backend error tracking. Capture generation failures, LLM API errors, PDF conversion failures. |
+| **Performance Monitoring** | Not mentioned | OpenTelemetry tracing across the generation pipeline: prompt assembly → LLM call → JSON parsing → DOCX generation → PDF conversion → S3 upload. Identify bottlenecks (LLM latency vs. document rendering latency). |
+| **Health Checks** | Not mentioned | `/health` endpoint for load balancer probes. Check DB connectivity, Redis connectivity, S3 connectivity, and LLM provider connectivity (with a lightweight ping). |
+| **Backup & Disaster Recovery** | Not mentioned | Automated PostgreSQL backups (daily logical dump + WAL archiving for point-in-time recovery). S3 versioning on document artifacts. Document the RPO/RTO targets. |
+
+### B.6 Internationalization & Accessibility
+
+| Area | What's Missing | What to Add |
+|---|---|---|
+| **Multi-language CVs** | Not mentioned | Real SaaS feature: allow users to specify output language. The LLM generates the CV in the requested language. Requires the master prompt to support a `[OUTPUT_LANGUAGE]` token. Must handle right-to-left languages (Arabic, Hebrew) in DOCX output. |
+| **Accessibility (WCAG)** | Not mentioned | The web UI must meet WCAG 2.1 AA: keyboard-navigable, screen-reader labels on all interactive elements, sufficient color contrast, focus management in the multi-step profile wizard. |
+| **Localization** | Not mentioned | UI strings must be externalized to translation files (i18n). At minimum support English; add Spanish, German, and French as next-tier languages based on market demand. |
+
+### B.7 Admin & Operations
+
+| Area | What's Missing | What to Add |
+|---|---|---|
+| **Admin Dashboard** | Not mentioned | Super-admin panel for platform operators: user management, subscription management, view generation logs, LLM provider health status, system health, refund processing, content moderation (flagged/generated content review). |
+| **Content Moderation** | Not mentioned | User-uploaded profiles and job descriptions should pass through a content moderation filter (e.g., AWS Rekognition for images in uploaded CVs, or a text moderation API) to detect PII exposure, inappropriate content, or policy violations before storage or processing. |
+| **Usage Analytics** | Not mentioned | Track: total generations by tier, LLM provider distribution, average token usage per generation, conversion rate (trial → paid), churn rate, feature adoption (which export formats are used most). Use for product decisions and Stripe billing reconciliation. |
+
+---
+
+## Part C: Full Sprint Breakdown
+
+### Sprint 0 — Foundation & Engineering Standards (Week 0, 3–5 days)
+
+**Goal:** Establish the project scaffold, coding standards, CI/CD skeleton, and the engineering environment before any feature work begins.
+
+**Tasks:**
+- [ ] Initialize the monorepo or polyrepo structure per the team's preference. Recommended: separate `frontend/`, `backend/`, `worker/` directories with a root `docker-compose.yml` and a root `Makefile`.
+- [ ] Backend: scaffold FastAPI application with `pydantic` v2, `SQLAlchemy` 2.0 (async), `alembic` for migrations, `python-dotenv` / `pydantic-settings` for config. Set up structured logging (`structlog` or `logging` with JSON formatter).
+- [ ] Frontend: scaffold Next.js 14 with App Router, Tailwind CSS, Shadcn UI, TanStack Query, Zustand. Set up eslint + prettier + TypeScript strict mode.
+- [ ] Database: provision a local PostgreSQL 16 instance (Docker). Create the initial Alembic migration with the core tables from the spec (users, organizations, subscriptions, master_profiles, llm_configs, generation_jobs) plus the additional tables identified below.
+- [ ] Additional DB tables not in the spec:
+  - `credit_packages` — predefined credit bundles for pay-per-set purchases.
+  - `user_credits` — ledger of credits owned by each user (idempotent, auditable).
+  - `audit_logs` — append-only generation + billing event log.
+  - `notifications` — in-app notification queue.
+  - `email_queue` — outgoing email log (idempotent send tracking).
+- [ ] CI: Set up GitHub Actions workflow that runs on every push: lint (ruff/ESLint), typecheck (mypy/tsc), and unit tests (pytest/vitest). Fail the PR on any violation.
+- [ ] Secret management: set up `.env.example` with all required variables documented. Never commit `.env`. Use GitHub Secrets for CI.
+- [ ] Docker: write `Dockerfile` for backend, frontend, and worker. Write `docker-compose.yml` with all five services (frontend, backend, worker, postgres, redis) and a `.dockerignore`.
+- [ ] Design system tokens: define the color palette, typography scale, spacing scale, and component variants in `frontend` before building screens. This prevents inconsistent UI later.
+
+**Definition of Done:** A new developer can clone the repo, run `make install && make dev`, and see the backend respond to `GET /health` and the frontend render a landing page — with zero manual setup steps.
+
+---
+
+### Sprint 1 — Authentication, User Identity & Trial Lifecycle (Week 1–2)
+
+**Goal:** Users can sign up, log in, and enter the 14-day trial. Everything else is gated until this works.
+
+**Tasks:**
+- [ ] **Backend Auth:**
+  - [ ] Implement `POST /api/v1/auth/signup` — email + password (with validation: password strength, email format). Hash passwords with `bcrypt` or `argon2`. Initialize trial: `trial_ends_at = now + 14 days`, `trial_credits_remaining = 5`, subscription status = `trialing`.
+  - [ ] Implement `POST /api/v1/auth/login` — returns JWT access token (short-lived) + refresh token (longer-lived, stored in DB and rotated on use). Use `python-jose` or `PyJWT`.
+  - [ ] Implement `POST /api/v1/auth/refresh` — exchanges refresh token for new access token.
+  - [ ] Implement `POST /api/v1/auth/logout` — revokes refresh token.
+  - [ ] Implement `POST /api/v1/auth/forgot-password` + `POST /api/v1/auth/reset-password` — password reset flow via email token.
+  - [ ] Implement `GET/PUT /api/v1/users/me` — retrieve and update own profile (name, email, password).
+- [ ] **Backend Trial Logic:**
+  - [ ] Middleware/dependency that checks subscription status on every generation request. If `status = trialing` and `now < trial_ends_at` and `trial_credits_remaining > 0`, allow. If trial expired, return `402 Payment Required` with a clear message and a link to upgrade.
+  - [ ] Credit consumption: on successful generation, decrement `trial_credits_remaining` (for trial users) or `user_credits` balance (for pay-per-set users).
+- [ ] **Frontend Auth:**
+  - [ ] Signup page: email, password, confirm password, full name. Show password strength indicator.
+  - [ ] Login page: email, password. "Forgot password?" link.
+  - [ ] Post-login redirect to dashboard. Store tokens in an HTTP-only cookie (not localStorage — prevents XSS token theft).
+  - [ ] Password reset flow: email input → email with reset link → reset form.
+- [ ] **Email (transactional):**
+  - [ ] Integrate email provider (Resend, SendGrid, or Postmark). Set up sending domain/SPF/DKIM.
+  - [ ] Email: welcome + trial details on signup. Verification email on signup (optional but recommended). Password reset email. Trial expiring warning (day 12). Trial expired email.
+- [ ] **Security:**
+  - [ ] Rate limit `/auth/signup` and `/auth/login` to prevent brute force (e.g., 5 attempts per email per hour).
+  - [ ] Input sanitization on all auth endpoints.
+
+**Definition of Done:** A new user can sign up, receive a welcome email, log in, and see a dashboard showing "14-day trial — 5 generations remaining." After using 5 generations, or after 14 days, generation is blocked with a clear upgrade prompt.
+
+---
+
+### Sprint 2 — Master Profile Builder: Two-Method Onboarding (Week 2–3)
+
+**Goal:** A user with a fresh account can create a master profile in one of two ways — (A) filling out a structured multi-step web form that captures every field the master prompt requires, or (B) uploading an existing CV (PDF/DOCX) which the system parses and pre-fills, after which the user reviews and corrects every field. The profile is the core data asset the entire SaaS depends on; profile quality directly determines generation quality.
+
+**Account/Profile separation:** The account (`users` table) stores only identity, auth, and billing — email, password hash, display name, role, subscription state. The master profile (`master_profiles` table) stores all CV content as a validated `profile_data` JSONB. They are foreign-key linked but conceptually and structurally separate. A user with a valid account but no profile cannot generate — the UI guides them to create a profile first.
+
+**Tasks:**
+- [ ] **Backend — Profile data model & validation:**
+  - [ ] Define a Pydantic v2 model for `profile_data` JSONB that validates on every write. The model exactly matches the schema in spec section 1.3.2: `contact` (full_name, location, phone, email, linkedin, website_portfolio), `summary`, `education[]` (degree, institution, location, start_date, end_date, thesis, details), `experience[]` (role, company, location, start_date, end_date, bullets — note: `relevance_note` is NOT stored here, it is generated at generation time), `skills` (technical[], domain[], tools[], soft[]), `publications[]` (citation, year, doi, link), `certifications[]` (name, issuer, year), `languages[]` (language, proficiency), `projects[]` (name, description, tech_stack, link), `additional_info`.
+  - [ ] `profile_data` is validated by the Pydantic model BEFORE it enters the DB. Invalid JSON is rejected with a 422 and specific field-level error messages.
+  - [ ] `GET /api/v1/profiles` — list user's profiles with: id, title, completeness_score (0–100), updated_at, is_default. Sorted by updated_at desc.
+  - [ ] `POST /api/v1/profiles` — create a new profile. Request body: `{title, profile_data}`. Validates `profile_data` against the Pydantic model. Returns the created profile. A profile can be created as a draft (missing required fields) — the `is_draft` flag is stored and surfaced in the API.
+  - [ ] `GET /api/v1/profiles/{id}` — retrieve full profile.
+  - [ ] `PUT /api/v1/profiles/{id}` — full update. Same validation as create. Returns updated profile.
+  - [ ] `PATCH /api/v1/profiles/{id}` — partial update (for the live editor — each section save calls this). Validates only the changed fields.
+  - [ ] `DELETE /api/v1/profiles/{id}` — hard delete with cascade. The user confirms in the UI.
+  - [ ] `POST /api/v1/profiles/{id}/set-default` — mark a profile as the default for generation.
+  - [ ] **Completeness scoring:** compute a 0–100 score from the profile data: +25 for non-empty contact.full_name, +25 for at least one valid education entry, +25 for at least one valid experience entry, +25 for non-empty skills (any group). Return this in the profile list and detail responses. A score < 75 shows a "Profile incomplete — some sections are missing" warning in the UI.
+
+- [ ] **Backend — Method A: Structured Web Form API support:**
+  - [ ] The form is section-oriented. Each section has its own partially-filled state that the frontend sends to the backend as the user progresses. Implement `PATCH /api/v1/profiles/{id}/sections/{section_name}` where `section_name` is one of: `contact`, `summary`, `education`, `experience`, `skills`, `publications`, `certifications`, `languages`, `projects`, `additional_info`. This allows the frontend to save each section independently as the user works through the wizard.
+  - [ ] Date validation: accept "2019", "2019-02", "Feb 2019", "February 2019", "Present" for end_date. Normalize to "MMM YYYY" or "YYYY" internally. The Pydantic validator does the normalization.
+  - [ ] Skills taxonomy: maintain a server-side list of common CV skills ( seeded from a broad taxonomy of ~200 skills across technical, domain, tools, and soft categories). The `/api/v1/skills/suggestions?query=` endpoint returns autocomplete suggestions. Free-form skills that don't match the taxonomy are allowed.
+
+- [ ] **Backend — Method B: CV File Upload & Parse:**
+  - [ ] `POST /api/v1/profiles/import` — accepts a file upload (PDF or DOCX, max 10 MB). Validates file type by magic bytes (not extension). Queues a Celery task and returns `{parse_job_id}` immediately.
+  - [ ] `GET /api/v1/profiles/import/{parse_job_id}` — returns parse status and, on completion, the parsed `profile_data` draft (with confidence flags on each field) + a list of sections not detected in the file.
+  - [ ] Celery task `parse_cv_file`: receives the file path, delegates to the parser module. Steps in the parser:
+    1. File validation (magic bytes, macro stripping for DOCX).
+    2. Text extraction: `pdfplumber` for PDF (preferred, table-aware), `pymupdf` as fallback. `python-docx` for DOCX — extract paragraphs in document order, flatten tables to text.
+    3. Section segmentation: fuzzy-match standard CV headers ("Experience", "Education", "Skills", "Summary", "Publications", "Certifications", "Languages", "Projects", "Work History", "Professional Experience", "Academic Background"). Text between headers → preceding section.
+    4. Entity extraction per section (see spec section 1.5, Method B for full detail).
+    5. Confidence scoring: each extracted field tagged high/medium/low. Email regex → high. Phone regex → medium. Name heuristic → low. Institution name from known-universities list → high; from heuristic only → medium.
+    6. Return the structured `profile_data` draft with confidence annotations attached to each field (a parallel `field_confidences` dict: `{["experience"][0]["company"]: "medium", ...}`.
+  - [ ] Parser library: build as a separate Python module `cv_parser/` that can be unit-tested independently with sample CV text fixtures. Test cases: a clean academic CV, a standard industry CV, a CV with tables, a CV with non-standard section headers, a scanned-image PDF (OCR path).
+  - [ ] OCR path (scanned PDFs): use `pytesseract` + `pymupdf` to render pages to images and OCR. All extracted fields get "low — OCR source" confidence. If no text is extracted at all, return a parse error with message: "No text could be extracted from this PDF. Please use a text-based PDF or DOCX, or enter your profile manually."
+  - [ ] Security: DOCX macro stripping before parse (use `python-docx` to open and re-save without macros, or strip the `word/activeMacros` and `word/ macros` parts from the ZIP). File type validation by content.
+
+- [ ] **Frontend — Profile list view:**
+  - [ ] Cards showing: profile title (editable inline), completeness score (visual gauge 0–100), is_default badge, updated_at timestamp, entry count summary. "Set as default", "Edit", "Delete" actions.
+  - [ ] Empty state (no profiles): two prominent CTAs — "Create profile from scratch" (Method A) and "Upload your CV to get started" (Method B). Brief explanation of both methods.
+  - [ ] Profile completeness warning: if score < 75, show a banner: "Your profile is missing sections. Add education, experience, or skills to improve generation quality."
+
+- [ ] **Frontend — Method A: Structured Web Form Wizard:**
+  - [ ] 10-step wizard matching the spec section 1.5, Method A:
+    1. Contact Information
+    2. Professional Summary (with "Help me write this" LLM-draft button)
+    3. Education (add/edit/remove entries, date validation inline)
+    4. Work Experience (add/edit/remove entries, newest-first ordering enforced, date validation)
+    5. Skills (tag inputs with autocomplete from taxonomy, 4 sub-groups: technical, domain, tools, soft)
+    6. Publications (optional, raw citation text — no parsing, user provides formatted citation)
+    7. Certifications (optional)
+    8. Languages (optional, proficiency dropdown)
+    9. Projects (optional)
+    10. Additional Info (optional, free text)
+  - [ ] Progress indicator showing current step and all steps. Steps with errors show a red indicator.
+  - [ ] Each step has a "Save & Continue" button and a "Save as Draft" button (saves current state, marks profile as draft if incomplete).
+  - [ ] "Save & Finish" on the last step triggers full validation. If validation fails, scroll to the first invalid section with errors highlighted and specific messages.
+  - [ ] Professional Summary step: "Help me write this" button calls the LLM (using the profile data entered so far) to draft a 3–4 line summary. The draft appears in the textarea as editable text. The LLM call is a lightweight generation using a short prompt — not the full master prompt.
+  - [ ] Skills step: tag input component with autocomplete. As the user types, `/api/v1/skills/suggestions?query=` is called debounced. Selected tags appear as removable chips. A toggle "Show all skills" expands to show the full taxonomy grouped by category.
+
+- [ ] **Frontend — Method B: Upload & Parse Flow:**
+  - [ ] From the empty-state page or from a "+ Import from CV" button on the profile list, the user reaches an upload screen.
+  - [ ] Upload screen: drag-and-drop zone + file picker. Accepts PDF and DOCX. Shows file size limit (10 MB). "Parse" button triggers the upload.
+  - [ ] During parsing: show a progress indicator (parsing may take a few seconds for large PDFs). The Celery task status is polled via the `parse_job_id`.
+  - [ ] On parse completion: the form wizard (Method A) opens automatically with parsed values pre-filled in every section that was detected. A banner at the top of the wizard: "We pre-filled your profile from the uploaded file. Please review every section before saving."
+  - [ ] Confidence indicators in the form: fields parsed with medium or low confidence show a small warning icon next to the field. Hover/tooltip: "Extracted from uploaded file — confidence: medium/low. Please verify." Fields not detected in the file show a muted note: "Not found in uploaded file."
+  - [ ] The user navigates through all sections of the wizard (progress indicator shows which sections have been viewed). The "Save & Finish" button is disabled until all 10 sections have been opened at least once. Alternatively, a "I have reviewed all sections" checkbox on the final step bypasses the section-tracking requirement.
+  - [ ] "Try a different file" button: goes back to the upload screen, allows re-upload. The previous parse result is discarded.
+  - [ ] OCR notice: if the file was OCR'd, show a prominent notice at the top of the wizard: "This file appears to be a scanned image. Parsed data may be inaccurate — please review every field carefully."
+
+- [ ] **Data Model additions for Sprint 2:**
+  - [ ] Add `is_default BOOLEAN DEFAULT false` column to `master_profiles` (one default per user — enforce in app logic).
+  - [ ] Add `is_draft BOOLEAN DEFAULT false` column to `master_profiles`.
+  - [ ] Add `updated_at TIMESTAMP` to `master_profiles` (updated on every write).
+
+**Definition of Done:** A newly signed-up user lands on the profile setup flow and can either fill out the 10-step wizard from scratch (validating as they go, saving a complete profile) or upload a PDF/DOCX CV, see it parsed with confidence flags, review every section in the wizard, and save. Both paths produce a valid `master_profiles` row with a `profile_data` JSONB that passes Pydantic validation. The profile list shows completeness scores. A profile with a score ≥ 75 is considered ready for generation.
+
+---
+
+### Sprint 3 — LLM Engine: Unified Adapter + First Generation (Week 3–4)
+
+**Goal:** The system can generate a CV and cover letter from a master profile + job description using a cloud LLM provider. This is the core value delivery.
+
+**Tasks:**
+- [ ] **Backend LLM Adapter:**
+  - [ ] Implement the `LLMAdapter` interface (abstract base class) with methods: `generate(prompt: str, schema: dict, **kwargs) -> dict`.
+  - [ ] Implement `OpenAIAdapter` — uses `openai` Python SDK, calls `chat.completions` with `response_format={type: "json_object"}`. Supports model selection (gpt-4o, gpt-4o-mini, etc.).
+  - [ ] Implement `AnthropicAdapter` — uses `anthropic` SDK, calls `messages.create` with `betax` or `tool_use` for structured output.
+  - [ ] Implement `OllamaAdapter` — calls local Ollama HTTP API (`/api/generate` or `/api/chat`). Supports custom base URL from user config.
+  - [ ] Implement `LiteLLMAdapter` — wraps LiteLLM's unified `completion` call as a fallback for any provider LiteLLM supports (DeepSeek, Gemini, etc.).
+  - [ ] Provider selection logic: at generation time, look up the user's active `llm_config`. If `provider = system_default`, use the platform's managed key. If `provider = openai/anthropic/custom`, use the user's BYOK (decrypt with AES-256-GCM using the KMS key). If `provider = ollama`, use the custom base URL.
+  - [ ] **Prompt Assembly Service:** a dedicated service that takes `master_profile` + `job_description` + `output_language` + `tone_preference` and assembles the generic master prompt from Part A.2 above, filling all placeholders.
+- [ ] **Generation Endpoint:**
+  - [ ] `POST /api/v1/generate` — receives: `profile_id`, `job_title`, `company_name`, `job_description`, `output_language` (optional), `tone` (optional). Returns: `job_id` immediately (generation is async).
+  - [ ] Async task (Celery or FastAPI BackgroundTasks for MVP): run prompt assembly → LLM call → JSON parse → validate against CV_SCHEMA and COVER_LETTER_SCHEMA → on failure, retry up to 3 times with correction prompt → on success, store result in `generation_jobs` and trigger document generation task.
+  - [ ] `GET /api/v1/generate/jobs/{id}` — returns job status and, on completion, the artifact URLs.
+- [ ] **Frontend Generation Studio:**
+  - [ ] Split-view UI: left panel = job description input (textarea with placeholder), job title, company name, profile selector, LLM provider selector, generate button. Right panel = tabbed preview (CV tab / Cover Letter tab).
+  - [ ] Generation status: show a progress indicator while processing. On completion, show download buttons for DOCX and PDF.
+  - [ ] Basic HTML preview of the CV (render the JSON to a styled single-column HTML preview) so the user sees the result before downloading.
+
+**Definition of Done:** A trial user with a completed master profile can paste a job description, click "Generate", and 30–90 seconds later see a formatted CV and cover letter preview, with download buttons for DOCX and PDF. The output passes JSON schema validation.
+
+---
+
+### Sprint 4 — Document Engine: ATS-Compliant DOCX & PDF (Week 4–5)
+
+**Goal:** Generated JSON is rendered to production-quality, ATS-compliant .docx and .pdf files that open cleanly in Word, Google Docs, and LibreOffice.
+
+**Tasks:**
+- [ ] **DOCX Engine (`python-docx`):**
+  - [ ] Implement a `DocxRenderer` class that takes a `CV_SCHEMA` JSON object and produces a `.docx` file.
+  - [ ] Document setup: 1-inch margins all sides. Default font: Calibri 11pt. Line spacing: 1.15. Page size: Letter (default) or A4 (user preference).
+  - [ ] Header section: candidate name in large bold (20–24pt), contact line below in smaller font (10–11pt), separated by a horizontal rule (border bottom on paragraph).
+  - [ ] Professional Summary: Normal style, no heading number.
+  - [ ] Skills section: "CORE COMPETENCIES" heading (Heading 1 style or bold + underline), skills as a single paragraph with comma separation, or as short bullets.
+  - [ ] Experience entries: "PROFESSIONAL EXPERIENCE" heading. For each entry: role title (bold) + company + location + dates on one line (use tab stops or inline formatting), followed by bullets (List Bullet style).
+  - [ ] Relevance notes: italic, slightly indented, prefixed with "Relevance to [domain]:"
+  - [ ] Education: "EDUCATION" heading. Each entry: degree (bold) + institution + location + dates, thesis on a separate italic line if present.
+  - [ ] Publications: "SELECTED PUBLICATIONS" or "PUBLICATIONS" heading. Each citation as a normal paragraph.
+  - [ ] Certifications, Languages: similar treatment.
+  - [ ] **Validation:** Open the generated .docx in Microsoft Word (or LibreOffice headless) and verify it renders correctly. Check that there are no tables, no text boxes, no multi-column sections.
+  - [ ] **ATS Sanity Check:** Run the generated .docx through a parser simulator (e.g., extract text with `python-docx` and verify it reads in logical order: header → summary → skills → experience → education → publications).
+- [ ] **PDF Engine:**
+  - [ ] Convert .docx to PDF using headless LibreOffice (`libreoffice --headless --convert-to pdf`) in the worker container. This is the most reliable path for pixel-perfect output matching what the user sees in Word.
+  - [ ] Alternative: if LibreOffice is too heavy for the deployment, use `docx2pdf` (requires Windows/macOS) or `WeasyPrint` from an HTML rendering of the CV (acceptable but verify layout fidelity).
+  - [ ] Store both .docx and .pdf in S3 (or MinIO), with URLs stored in `generation_jobs`.
+- [ ] **Cover Letter DOCX:**
+  - [ ] Separate `DocxRenderer` for cover letters: header with candidate contact, date, hiring manager/company address block, salutation, paragraphs, closing, signature. Standard business letter format. One page.
+- [ ] **Markdown Export:**
+  - [ ] Serialize `CV_SCHEMA` to clean Markdown: headers as `#` / `##`, experience entries as bold role + company + dates, bullets as `-`. Useful for GitHub, Notion, and plain-text applications.
+
+**Definition of Done:** Every generated CV and cover letter produces a download-ready .docx and .pdf. The .docx opens in Word with no layout errors, no tables, no parsing issues. The PDF matches the .docx visually. Generated artifacts are uploaded to S3 and a `stored_artifacts` row is created on successful generation (subject to quota check — see Sprint 4.5).
+
+---
+
+### Sprint 4.5 — Personal Document Library & Storage Quota (Week 5)
+
+**Goal:** Every generated CV and cover letter is saved to the user's personal library with a per-user storage quota. Users can browse, download, delete, rename, and re-generate from prior jobs. The library is the primary value-retention feature of the SaaS — users come back to it.
+
+**Tasks:**
+- [ ] **Backend — Stored Artifacts API:**
+  - [ ] `stored_artifacts` table (see spec section 1.4.1): `id`, `user_id` (FK), `generation_job_id` (FK, nullable), `artifact_type` (`cv_docx` | `cv_pdf` | `cl_docx` | `cl_pdf`), `file_key` (S3 object key), `file_size_bytes`, `file_url`, `title` (user-editable label), `job_title`, `company_name`, `at_score`, `created_at`.
+  - [ ] `GET /api/v1/library` — list user's stored artifacts. Response includes: id, artifact_type, title, job_title, company_name, at_score, file_size_bytes, created_at, download_url (presigned, 24h expiry). Sorted by created_at desc. Support query params: `?type=cv` (only CV artifacts), `?search=keyword` (search title + job_title + company_name), `?from_date=YYYY-MM-DD&to_date=YYYY-MM-DD`.
+  - [ ] `GET /api/v1/library/{id}/download` — generates a fresh presigned S3 URL (24h expiry) for the artifact and returns it. Logs the download event in the audit log.
+  - [ ] `PUT /api/v1/library/{id}` — update artifact metadata: `title` (user can rename), `job_title`, `company_name`. Does NOT touch the S3 object.
+  - [ ] `DELETE /api/v1/library/{id}` — delete an artifact. Soft-delete the `stored_artifacts` row, trigger an async Celery task to delete the S3 object. Returns 204.
+  - [ ] `GET /api/v1/library/quota` — returns: `used_bytes` (SUM of file_size_bytes for user's stored_artifacts), `quota_bytes` (from user's subscription tier or pay-per-set base quota), `available_bytes`, `quota_expansion_url` (link to billing upgrade if at quota).
+  - [ ] **Quota enforcement on generation complete:** after the document engine uploads artifacts to S3 and receives the file size, call `GET /api/v1/library/quota` internally. If `used_bytes + new_artifact_bytes > quota_bytes`: save the `stored_artifacts` rows with `is_temp = true` (or upload to a temp S3 prefix with 30-day lifecycle rule), return the download URLs to the user, and flag the generation result as "saved to library: false — storage quota full." The user sees a clear UI message: "Your generation is ready to download. Your library is full — delete an old document or upgrade your plan to save this one." If quota is available, save normally with `is_temp = false`.
+
+- [ ] **Backend — Quota configuration:**
+  - [ ] Add `storage_quota_bytes` column to `subscriptions` table (per-tier quota, set on subscription creation/update). Default values: trial = 5 MB, pay_per_use = 5 MB, individual = 25 MB, team = 100 MB (pooled — tracked on the organization, not per-user — see Sprint 7 for team quota).
+  - [ ] For pay-per-set users without an active subscription row, use a hardcoded base quota of 5 MB. Quota expansion for pay-per-set users is sold as a one-time "storage upgrade" Stripe product.
+  - [ ] Team pooled quota: tracked on the `organizations` table as `used_storage_bytes`. Individual team members' artifacts count against the org pool. The team billing dashboard shows pooled usage.
+
+- [ ] **Backend — S3 Lifecycle for temp artifacts:**
+  - [ ] Configure S3 lifecycle rule: objects in the `temp/` prefix are automatically deleted after 30 days. This covers the case where a user generates but doesn't save to library (quota full) — the temp artifact auto-purges.
+  - [ ] Daily Celery beat task: scan `stored_artifacts` for rows where `is_temp = true` and `created_at > 30 days ago`. Delete the S3 object and the DB row. This is a belt-and-suspenders backup to the S3 lifecycle rule.
+
+- [ ] **Backend — Bulk download (ZIP):**
+  - [ ] `POST /api/v1/library/bulk-download` — request body: array of artifact IDs. Creates a ZIP containing the selected files. The ZIP is uploaded to S3 (temp prefix, 24h TTL), a `stored_artifacts`-like row is created for the ZIP itself, and a download URL is returned. Charged against storage quota as a temp artifact (auto-purged after 24h via S3 lifecycle). This is available to all tiers — it's a convenience, not a premium feature.
+
+- [ ] **Frontend — Library UI:**
+  - [ ] Library page: grid of artifact cards. Each card shows:
+    - Title (editable inline — click to rename)
+    - Job title + company (if set)
+    - Artifact type icons: CV DOCX, CV PDF, CL DOCX, CL PDF (show only the types that exist for this generation set)
+    - ATS score badge (if available, e.g., "ATS: 87")
+    - File size (e.g., "124 KB")
+    - Created date (relative, e.g., "3 days ago")
+    - Download button (individual file download — shows a dropdown with the available formats for this set)
+    - "Download All" button on the card (ZIPs the set: CV DOCX + CV PDF + CL DOCX + CL PDF)
+    - Delete button (with confirmation dialog)
+  - [ ] Bulk selection: checkbox on each card. A "Download Selected (ZIP)" button appears in the toolbar when 2+ cards are selected.
+  - [ ] Search bar: search by title, job title, or company name. Filter chips: "CV only", "Cover Letters only", "This month", "This year".
+  - [ ] Empty state: "No saved documents yet. Generate your first CV to see it here."
+  - [ ] Quota indicator in the library header: "X MB / Y MB used" with a progress bar. When near quota (>80%), show a warning: "Storage almost full — delete old documents or upgrade." When at quota, show: "Storage full — upgrade your plan to save more documents."
+  - [ ] Post-generation: after a successful generation, the result panel shows download buttons AND a "Save to library" toggle (on by default if quota allows). If the user toggles it off, the artifacts are uploaded as temp and the user is told they have 30 days to download before auto-purge. If quota is full, the toggle is off and disabled with the message above.
+  - [ ] "Re-generate from this job" action on each card: takes the user to the generation studio with the original job description, company, and profile pre-filled — one click to generate a new variation.
+
+- [ ] **Frontend — Rename flow:**
+  - [ ] Click on the title in a card → inline edit (text input replaces the title text). Enter or blur saves. The `PUT /api/v1/library/{id}` endpoint is called.
+
+**Definition of Done:** After every successful generation, the CV and cover letter artifacts (DOCX + PDF each) are saved to the user's library with a `stored_artifacts` row and S3 object, subject to quota. The library page shows all saved artifacts with search, filter, download (individual and ZIP), rename, and delete. The quota indicator accurately reflects used vs. available space. When quota is full, generation still succeeds (downloadable immediately) but artifacts are not auto-saved, with a clear UI prompt to the user.
+
+---
+
+### Sprint 5 — Stripe Billing: Subscriptions, Credits & Webhooks (Week 5–6)
+
+**Goal:** Users can upgrade from trial to paid, purchase credit bundles, and the system correctly enforces billing state across all features.
+
+**Tasks:**
+- [ ] **Stripe Setup:**
+  - [ ] Create Stripe account. Set up product catalog: Individual Monthly ($19.99), Team Monthly ($79.99), Credit Bundle products (e.g., 3 credits for $11.97, 10 credits for $35.90).
+  - [ ] Configure Stripe webhook endpoint: `POST /api/v1/billing/webhook`. Verify signatures with `stripe.Webhook.construct_event`. Handle: `checkout.session.completed` (for credit bundles), `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_succeeded`, `invoice.payment_failed`.
+  - [ ] Implement idempotency: dedupe webhook events by `event.id`. Store processed event IDs in Redis or DB to prevent double-processing on Stripe retries.
+- [ ] **Checkout Flows:**
+  - [ ] `POST /api/v1/billing/checkout-session` — creates a Stripe Checkout session for: (a) individual subscription, (b) team subscription, (c) credit bundle purchase. Returns the Checkout URL. On completion, Stripe redirects to a frontend success page.
+  - [ ] On `checkout.session.completed`: if subscription, set `status = active`, `plan_tier = individual/team`, clear trial state. If credit bundle, add credits to `user_credits` ledger.
+- [ ] **Subscription Management UI:**
+  - [ ] Billing dashboard: show current plan, next billing date, payment method, usage (generations this month / credits remaining). "Upgrade" / "Change Plan" / "Buy Credits" buttons.
+  - [ ] Cancel subscription: `POST /api/v1/billing/cancel` — calls Stripe API to cancel at period end. Update local `subscriptions` table. Show clear messaging about what happens on expiration.
+  - [ ] Invoice history: list past invoices with download links (Stripe invoice PDFs).
+- [ ] **Trial Conversion:**
+  - [ ] On day 12 of trial: trigger transactional email "Your trial is ending soon — upgrade to keep generating."
+  - [ ] In-app banner on dashboard: "Trial ends in X days — upgrade now."
+- [ ] **Credit System (Pay-Per-Set):**
+  - [ ] Credit bundle purchase flow via Stripe Checkout (one-time payment).
+  - [ ] On successful generation: decrement credit balance. If balance reaches 0, block generation with "Purchase more credits" prompt.
+  - [ ] Credits expire after 12 months — show expiration date in billing dashboard.
+
+**Definition of Done:** A trial user can upgrade to Individual ($19.99/mo) via Stripe Checkout and immediately have unlimited generation (within fair-use cap). A user can buy a 3-credit bundle and use them one at a time. Webhooks correctly update the local DB. Invoice downloads work.
+
+---
+
+### Sprint 6 — LLM Agnosticism: BYOK, Local LLM & WebSocket Streaming (Week 6–7)
+
+**Goal:** Users are not locked into the platform's LLM. They can bring their own API key or connect to a local Ollama/vLLM instance. Real-time token streaming for a premium UX.
+
+**Tasks:**
+- [ ] **BYOK Management:**
+  - [ ] `GET /api/v1/llm-config` — list user's LLM configurations.
+  - [ ] `POST /api/v1/llm-config` — create a new config: provider, base_url (for local/custom), api_key (encrypted at rest with AES-256-GCM + KMS), model_name, is_active.
+  - [ ] `PUT /api/v1/llm-config/{id}` — update.
+  - [ ] `DELETE /api/v1/llm-config/{id}` — delete.
+  - [ ] Frontend: LLM Settings panel in the generation studio. List configured providers with radio-button selection. "Add New Provider" form: provider dropdown (OpenAI, Anthropic, Ollama, Custom), API key input (masked), base URL input (for Ollama/Custom), model name input, test button that sends a lightweight ping to verify connectivity.
+  - [ ] "Platform Default" option always available (uses managed keys, billed to platform).
+- [ ] **Ollama/vLLM Adapter:**
+  - [ ] Ollama: test against `http://localhost:11434`. Support model names like `llama3.1:70b`, `deepseek-coder:7b`. Handle Ollama's streaming format.
+  - [ ] vLLM: support OpenAI-compatible endpoint at custom base URL (e.g., `http://vllm-server:8000/v1`). Model name is whatever the user deployed.
+  - [ ] Local mode privacy note in UI: "When using a local LLM, your data never leaves your machine."
+- [ ] **WebSocket Token Streaming:**
+  - [ ] `WS /api/v1/generate/stream/{job_id}` — opens a WebSocket connection. The generation task sends progress events: `{"type": "token", "content": "..."}`, `{"type": "parsing"}`, `{"type": "complete", "cv_url": "...", "cl_url": "..."}`, `{"type": "error", "message": "..."}`.
+  - [ ] Frontend: live preview panel that updates as tokens arrive. For CV: stream tokens into the HTML preview in real time. For cover letter: same.
+  - [ ] Model providers that support streaming (OpenAI, Anthropic, Ollama) should stream tokens. Providers that don't (some local setups) should send the complete result at once.
+
+**Definition of Done:** A user can configure their own OpenAI API key and use it for generations (billed to them, not the platform). A user running Ollama locally can connect to `http://localhost:11434` and generate entirely offline. WebSocket streaming shows the CV being written in real time.
+
+---
+
+### Sprint 7 — Team Seats, Org Management & Multi-Tenancy (Week 7–8)
+
+**Goal:** Team/agency accounts can invite members, manage seats, share master profiles, and monitor pooled usage.
+
+**Tasks:**
+- [ ] **Organization Data Model:**
+  - [ ] `organizations` table (from spec) + `organization_members` table (from spec).
+  - [ ] Add: `organization_master_profiles` — profiles owned by the organization (shared). A profile belongs to either a user or an organization.
+  - [ ] Add: `organization_usage_log` — per-organization generation count for billing reconciliation.
+- [ ] **Team Invitation Flow:**
+  - [ ] `POST /api/v1/organizations/{id}/invite` — send email invitation to a user (by email). Stores invitation in `organization_invitations` table with expiration (e.g., 7 days). Invited user accepts by signing up or logging in and clicking "Accept Invitation."
+  - [ ] `GET /api/v1/organizations/{id}/members` — list members with roles.
+  - [ ] `DELETE /api/v1/organizations/{id}/members/{user_id}` — remove member.
+  - [ ] Role permissions: `admin` can invite/remove members, manage shared profiles, view org usage. `member` can generate using shared profiles and their own profiles.
+- [ ] **Team Billing:**
+  - [ ] Team subscription: base 5 seats included. Additional seats at $12/seat/month. Stripe handles this via subscription items.
+  - [ ] Pooled generation quota: 250 sets/month for team plan. Track usage in `organization_usage_log`. On approaching the limit (e.g., 80%), notify all members.
+- [ ] **Team Dashboard UI:**
+  - [ ] Organization admin panel: team members list, invite button, role management, shared master profiles management, usage gauge (generating / 250 this month).
+  - [ ] Generation studio: profile selector shows both user's own profiles and organization's shared profiles.
+
+**Definition of Done:** An organization admin can invite a team member by email, the invitee can accept, and both can see and use shared master profiles. The team's pooled generation quota is tracked and enforced.
+
+---
+
+### Sprint 8 — Advanced ATS Analytics, Multi-Language & Polish (Week 8–9)
+
+**Goal:** Differentiators that separate this from commodity CV generators: ATS keyword scoring, multi-language output, rich export options, and a polished production UX.
+
+**Tasks:**
+- [ ] **ATS Keyword Match Score:**
+  - [ ] In the generation pipeline, after the LLM returns the CV JSON, run a keyword analysis: extract keywords from the job description (noun phrases, technical terms, tools), check which appear in the CV JSON (summary, skills, experience bullets). Compute a score 0–100.
+  - [ ] Return the score in the generation result and display it in the UI: "ATS Match: 87/100 — 3 important keywords missing." List the missing keywords so the user can decide whether to regenerate or manually adjust their profile.
+  - [ ] This is a **major marketing differentiator** — surface it prominently.
+- [ ] **Multi-Language Output:**
+  - [ ] Add `output_language` field to the generation request and to the master prompt template (`[OUTPUT_LANGUAGE]` token).
+  - [ ] Supported languages at launch: English (default), Spanish, German, French, Finnish. The LLM generates the CV in the requested language. The master profile data stays in its original language (the LLM translates as part of generation).
+  - [ ] DOCX and PDF output in the target language. For RTL languages (Arabic, Hebrew): set the DOCX text direction appropriately.
+- [ ] **Bulk Export (Team Tier):**
+  - [ ] `POST /api/v1/generate/bulk` — accepts an array of job descriptions + a profile ID. Creates a batch of generation jobs. On completion, packages all DOCX/PDF files into a ZIP and stores in S3. Returns download URL.
+- [ ] **Document Library:**
+  - [ ] `GET /api/v1/library` — list all past generations for the user (or organization). Show: job title, company, date, ATS score, download links. Keep generated artifacts accessible indefinitely (or for a configurable retention period).
+  - [ ] "Save to Library" action on generation complete — users can choose to save or discard. Saved items go to the library; unsaved items are deleted after 30 days.
+- [ ] **Polish:**
+  - [ ] Dashboard redesign: clear trial/plan status, quick-action generate button, recent generations list, profile quick-select.
+  - [ ] Profile wizard UX: progress indicator, save-as-draft, autosave.
+  - [ ] Generation studio UX: paste job description with rich text support (or clean plain text with good placeholder), profile selector as a dropdown with search, LLM provider as a segmented control.
+  - [ ] Empty states: no profiles yet → "Create your first master profile." No generations yet → "Generate your first CV."
+
+**Definition of Done:** The UI shows an ATS Match Score after every generation. Users can generate CVs in Spanish, German, French, and Finnish. Team users can bulk-export a ZIP of multiple generated sets.
+
+---
+
+### Sprint 9 — Production Hardening, Security Audit & Launch Prep (Week 9–10)
+
+**Goal:** The application is secure, observable, and ready for real users. All the gaps from Part B are addressed.
+
+**Tasks:**
+- [ ] **Security Hardening:**
+  - [ ] Rate limiting: implement per-user rate limits on all API endpoints using Redis. Generate endpoint: 1 request per 30 seconds for trial users, 1 per 10 seconds for paid. Auth endpoints: 5 per hour per email.
+  - [ ] Input sanitization: add a sanitization layer for all user-provided text before it enters the DB or the LLM prompt. Strip control characters, validate length limits, escape any injection attempts.
+  - [ ] File upload security: for profile imports, validate file type by content (not just extension), enforce size limits (e.g., 5 MB), scan for embedded scripts/macros in DOCX (strip them). PDF parsing must not execute any embedded code.
+  - [ ] CORS: set explicit allowlist for frontend origin(s). No wildcard in production.
+  - [ ] Content Security Policy headers on all responses.
+  - [ ] Security headers: HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy.
+  - [ ] KMS integration for API key encryption: replace any hardcoded or file-based encryption key with AWS KMS / GCP KMS / Vault.
+- [ ] **Observability:**
+  - [ ] Integrate Sentry (or self-hosted equivalent) for backend and frontend error tracking.
+  - [ ] OpenTelemetry tracing: instrument the generation pipeline end-to-end (prompt assembly → LLM call → JSON parse → DOCX render → PDF convert → S3 upload). Identify the latency breakdown.
+  - [ ] Structured logging: all log entries in JSON format with `request_id`, `user_id`, `action`, `status`, `duration_ms`. Pipe to a log aggregator (e.g., Grafana Loki, Datadog, or CloudWatch).
+  - [ ] Metrics: generation count by tier, LLM provider distribution, average token usage, error rate by provider, PDF conversion failure rate. Export to a metrics backend (Prometheus + Grafana, or managed).
+  - [ ] Health check endpoint: `/health` checks DB, Redis, S3, and primary LLM provider.
+- [ ] **Admin Dashboard:**
+  - [ ] Super-admin panel (protected by admin role check): user list with subscription status, generation log view, LLM provider health status, system health, refund processing interface, content flag review.
+- [ ] **Performance:**
+  - [ ] Load test the generation endpoint: simulate concurrent generation requests. Measure LLM API latency, JSON parsing time, DOCX render time, PDF conversion time. Optimize the slowest step.
+  - [ ] PDF conversion: if LibreOffice is the bottleneck, consider a pool of converter workers or a dedicated conversion service.
+  - [ ] DB query optimization: add indexes on `generation_jobs.user_id`, `master_profiles.user_id`, `subscriptions.user_id`, `subscriptions.organization_id`.
+- [ ] **Launch Prep:**
+  - [ ] README: setup instructions, architecture overview, environment variables, deployment instructions.
+  - [ ] Terms of Service + Privacy Policy pages (required for Stripe and for GDPR compliance).
+  - [ ] Error pages: 404, 500, 402 (payment required) — branded, helpful.
+  - [ ] Final end-to-end test: sign up → verify email → create profile → import CV → generate → download DOCX/PDF → upgrade to paid → add BYOK → generate with BYOK → team invite flow.
+
+**Definition of Done:** The application passes a security review (rate limiting, input sanitization, encrypted API keys, CORS, CSP, auth token security). Observability is in place (Sentry, tracing, structured logs, metrics). The admin dashboard exists. The README is complete.
+
+---
+
+### Sprint 10 — Post-Launch: Feedback Loop & Iteration (Week 10+)
+
+**Goal:** Learn from real usage and iterate. This is not a fixed sprint — it's the ongoing cadence.
+
+**Tasks:**
+- [ ] Collect user feedback: in-app feedback button on generated CVs ("Was this useful? 👍 / 👎"), optionally with a comment.
+- [ ] Track feature usage: which LLM providers are used most, which export formats, which languages, average ATS score distribution.
+- [ ] Monitor billing: reconcile Stripe invoices with local generation counts. Investigate any discrepancies.
+- [ ] Plan v1.1 features based on usage data and feedback:
+  - [ ] Cover letter customization (tone slider: formal / conversational / enthusiastic).
+  - [ ] CV template variants (different header styles, different summary placements — all still ATS-compliant).
+  - [ ] Job description parsing helper: paste a URL or upload a job posting file, auto-extract the description.
+  - [ ] Interview preparation: generate likely interview questions from the job description + CV, and suggested answers.
+  - [ ] Resume-by-numbers: quantitative achievement suggestions for profiles that lack quantified bullets.
+
+---
+
+## Part D: Master Prompt Genericness Checklist
+
+Before launch, verify the master prompt passes these checks:
+
+- [ ] **No hardcoded user identity:** running the prompt with a different profile produces a different CV — not a CV about Nicolus Rotich.
+- [ ] **No hardcoded sector translation:** the "translate X to Y" directive is replaced with the generic "Relevance Bridging" instruction from A.2.
+- [ ] **Handles all profile shapes:** test with (a) a full academic profile with publications, (b) a software engineer profile with no publications, (c) a career-changer with unrelated prior roles, (d) a junior profile with education but minimal experience, (e) a profile with gaps.
+- [ ] **Handles missing sections gracefully:** a profile with no publications produces a CV without a publications section; a profile with no certifications produces no certifications section.
+- [ ] **Output language works:** passing `output_language=es` produces a Spanish CV; the LLM does not fall back to English.
+- [ ] **JSON schema validation is strict:** any deviation from CV_SCHEMA or COVER_LETTER_SCHEMA triggers a retry. Test with an LLM that returns markdown-wrapped JSON, extra text, or partial JSON.
+- [ ] **Tone calibration works:** test with target roles at different levels (junior software engineer, senior engineering manager, research scientist, marketing director) and verify the tone is appropriate.
+- [ ] **Keyword matching is honest:** test with a job description that requires skills the profile does not have — verify the LLM does NOT fabricate those skills.
+
+---
+
+## Part E: Risk Register
+
+| Risk | Likelihood | Impact | Mitigation |
+|---|---|---|---|
+| LLM provider API changes break the adapter | Medium | High | Abstract the adapter interface well. Add a new adapter without touching the generation pipeline. Monitor provider changelogs. |
+| Ollama/local LLM quality is insufficient for good CVs | Medium | Medium | Set a minimum model recommendation (e.g., llama3.1:70b or better for local use). Show a quality warning if a smaller model is selected. |
+| PDF conversion (LibreOffice) is slow or unreliable in container | Medium | Medium | Bench LibreOffice conversion time in the target deployment environment early. Have WeasyPrint as a fallback. Consider a dedicated conversion microservice. |
+| Stripe webhook delivery is delayed, causing billing state mismatch | Low | Medium | Implement reconciliation job that runs daily: compare local subscription state with Stripe API. Repair any mismatch. |
+| User-uploaded CV files contain malware or inappropriate content | Low | High | Implement file content validation. Strip macros from DOCX. Consider a content moderation step for uploaded files. |
+| The generic master prompt produces lower-quality output than the original hardcoded version for some user types | Medium | Medium | A/B test the generic prompt against user-specific prompts for several profile types. Iterate on the generic prompt based on results. The user override feature (A.4) is the escape hatch. |
+| Trial users abuse the 5-generation limit by rapidly creating new accounts | Medium | Low | Rate limit signup by IP/device fingerprint. Require email verification. Cap generations per IP across accounts. |
+| GDPR / data residency requirements for EU users | Medium | High | Store EU user data in an EU region (AWS eu-west-1, GCP eu). Document data flows. Provide data deletion/export endpoints. |
+
+---
+
+*End of SPRINTS.md*
