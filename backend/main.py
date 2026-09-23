@@ -25,6 +25,7 @@ from backend.config import settings  # noqa: E402
 from backend.database import init_db, shutdown_db  # noqa: E402
 from backend.middleware.rate_limit import rate_limit_middleware  # noqa: E402
 from backend.middleware.security_headers import security_headers_middleware  # noqa: E402
+from backend.middleware.request_id import request_id_middleware  # noqa: E402
 from backend.profiles.router import router as profiles_router  # noqa: E402
 
 # ── Logging ────────────────────────────────────────────────────────────────
@@ -94,6 +95,9 @@ def create_app() -> FastAPI:
 
     # Security headers
     app.add_middleware(security_headers_middleware)
+
+    # Request ID middleware (before rate limiting so request_id is available)
+    app.add_middleware(request_id_middleware)
 
     # Routers
     app.include_router(health.router, tags=["health"])

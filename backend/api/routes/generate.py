@@ -37,6 +37,10 @@ from backend.llm.service import (
 )
 from backend.models import GenerationJob, MasterProfile, StoredArtifact
 from backend.validators.sanitization import sanitize_text  # noqa: E402
+import structlog  # noqa: E402
+
+log = structlog.get_logger()
+
 from fastapi import APIRouter, Depends, HTTPException, Response, status, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -139,6 +143,15 @@ async def start_generation(
     job_description = sanitize_text(str(job_description))
     job_title = sanitize_text(str(job_title)) if job_title else ""
     company_name = sanitize_text(str(company_name)) if company_name else ""
+
+    log.info(
+        "generation_started",
+        user_id=current_user_id,
+        profile_id=profile_id,
+        job_title=job_title,
+        company_name=company_name,
+        output_language=output_language,
+    )
 
     # Verify profile ownership
     from backend.models import MasterProfile
