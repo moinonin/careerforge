@@ -81,7 +81,7 @@ class Subscription(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default="gen_random_uuid()")
     user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
-    organization_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=True)
+    organization_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=True, index=True)
     stripe_customer_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     stripe_subscription_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     plan_tier: Mapped[str] = mapped_column(String(50), nullable=False)  # trial | pay_per_use | individual | team
@@ -128,7 +128,7 @@ class GenerationJob(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default="gen_random_uuid()")
     user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    profile_id: Mapped[str] = mapped_column(String(36), ForeignKey("master_profiles.id", ondelete="SET NULL"), nullable=True)
+    profile_id: Mapped[str] = mapped_column(String(36), ForeignKey("master_profiles.id", ondelete="SET NULL"), nullable=True, index=True)
     job_title: Mapped[str] = mapped_column(String(255), nullable=False)
     company_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     job_description: Mapped[str] = mapped_column(Text, nullable=False)
@@ -170,7 +170,7 @@ class StoredArtifact(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    generation_job_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("generation_jobs.id", ondelete="SET NULL"), nullable=True)
+    generation_job_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("generation_jobs.id", ondelete="SET NULL"), nullable=True, index=True)
     artifact_type: Mapped[str] = mapped_column(String(20), nullable=False)
     file_key: Mapped[str] = mapped_column(String(500), nullable=False)
     file_size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -212,7 +212,7 @@ class UserCredit(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default="gen_random_uuid()")
     owner_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    package_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("credit_packages.id", ondelete="SET NULL"), nullable=True)
+    package_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("credit_packages.id", ondelete="SET NULL"), nullable=True, index=True)
     credits: Mapped[int] = mapped_column(Integer, nullable=False)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -230,7 +230,7 @@ class AuditLog(Base):
     __tablename__ = "audit_logs"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default="gen_random_uuid()")
-    actor_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    actor_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     action: Mapped[str] = mapped_column(String(100), nullable=False)
     details: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -291,7 +291,7 @@ class Organization(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default="gen_random_uuid()")
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    owner_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    owner_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     max_seats: Mapped[int] = mapped_column(Integer, default=5, nullable=False)
     used_storage_bytes: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     seat_price_cents: Mapped[int] = mapped_column(Integer, default=1200, nullable=False)  # $12/seat/month
@@ -320,10 +320,10 @@ class OrganizationMember(Base):
     __tablename__ = "organization_members"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default="gen_random_uuid()")
-    organization_id: Mapped[str] = mapped_column(String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False)
-    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    organization_id: Mapped[str] = mapped_column(String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     role: Mapped[str] = mapped_column(String(50), default="member", nullable=False)  # admin | member
-    invited_by: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    invited_by: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     joined_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )
@@ -344,10 +344,10 @@ class OrganizationMasterProfile(Base):
     __tablename__ = "organization_master_profiles"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default="gen_random_uuid()")
-    organization_id: Mapped[str] = mapped_column(String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False)
+    organization_id: Mapped[str] = mapped_column(String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     profile_data: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
-    created_by: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_by: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     is_shared: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
@@ -369,8 +369,8 @@ class OrganizationUsageLog(Base):
     __tablename__ = "organization_usage_log"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default="gen_random_uuid()")
-    organization_id: Mapped[str] = mapped_column(String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False)
-    user_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    organization_id: Mapped[str] = mapped_column(String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     generation_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     period_key: Mapped[str] = mapped_column(String(20), nullable=False)  # YYYY-MM
     created_at: Mapped[datetime] = mapped_column(
@@ -393,11 +393,11 @@ class OrganizationInvitation(Base):
     __tablename__ = "organization_invitations"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default="gen_random_uuid()")
-    organization_id: Mapped[str] = mapped_column(String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False)
+    organization_id: Mapped[str] = mapped_column(String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
     email: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(String(50), default="member", nullable=False)
     token: Mapped[str] = mapped_column(String(255), nullable=False)
-    invited_by: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    invited_by: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False)  # pending | accepted | expired | cancelled
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
