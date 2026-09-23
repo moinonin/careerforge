@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 
 from backend.api.routes import health  # noqa: E402
 from backend.api.routes.analyzer import router as analyzer_router  # noqa: E402
+from backend.api.routes.admin import router as admin_router  # noqa: E402
 from backend.api.routes.billing import router as billing_router  # noqa: E402
 from backend.api.routes.generate import router as generate_router  # noqa: E402
 from backend.api.routes.llm_config import router as llm_config_router  # noqa: E402
@@ -114,6 +115,7 @@ def create_app() -> FastAPI:
     app.include_router(organizations_router, tags=["organizations"])
     app.include_router(analyzer_router, prefix="/api/v1/analyzer", tags=["analyzer"])
     app.include_router(billing_router, prefix="/api/v1/billing", tags=["billing"])
+    app.include_router(admin_router, tags=["admin"])
 
     @app.get("/health", include_in_schema=False)
     async def health_check() -> dict:
