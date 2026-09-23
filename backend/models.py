@@ -33,6 +33,7 @@ class User(Base):
     llm_configs = relationship("LLMConfig", back_populates="user", cascade="all, delete-orphan")
     generation_jobs = relationship("GenerationJob", back_populates="user", cascade="all, delete-orphan")
     stored_artifacts = relationship("StoredArtifact", back_populates="user", cascade="all, delete-orphan")
+    feedback = relationship("Feedback", back_populates="user", cascade="all, delete-orphan")
     user_credits = relationship("UserCredit", back_populates="owner", cascade="all, delete-orphan")
     notifications = relationship("Notification", back_populates="recipient", cascade="all, delete-orphan")
     audit_logs = relationship("AuditLog", back_populates="actor", cascade="all, delete-orphan")
@@ -46,6 +47,7 @@ class User(Base):
     invitations = relationship("OrganizationInvitation", back_populates="invited_by_user", cascade="all, delete-orphan", foreign_keys="OrganizationInvitation.invited_by")
     refresh_tokens = relationship("RefreshToken", back_populates="user", cascade="all, delete-orphan")
     metrics = relationship("GenerationMetric", back_populates="user", foreign_keys="GenerationMetric.user_id", cascade="all, delete-orphan")
+    feedback = relationship("Feedback", back_populates="user", cascade="all, delete-orphan")
 
 
 # ---------------------------------------------------------------------------
@@ -154,6 +156,8 @@ class GenerationJob(Base):
     user = relationship("User", back_populates="generation_jobs")
     profile = relationship("MasterProfile", back_populates="generation_jobs")
     metric = relationship("GenerationMetric", back_populates="generation_job", cascade="all, delete-orphan")
+    stored_artifacts = relationship("StoredArtifact", back_populates="generation_job", cascade="all, delete-orphan")
+    feedback = relationship("Feedback", back_populates="generation_job", cascade="all, delete-orphan")
 
 
 # ---------------------------------------------------------------------------
@@ -468,3 +472,23 @@ class GenerationMetric(Base):
     generation_job = relationship("GenerationJob", back_populates="metric")
     organization = relationship("Organization", back_populates="metrics")
     user = relationship("User", back_populates="metrics", foreign_keys="GenerationMetric.user_id")
+
+
+# ---------------------------------------------------------------------------
+# Feedback (Sprint 10 — user ratings)
+# ---------------------------------------------------------------------------
+
+class Feedback(Base):
+    __tablename__ = "feedback"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default="gen_random_uuid()")
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    generation_job_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("generation_jobs.id", ondelete="SET NULL"), nullable=True, index=True)
+    rating: Mapped[int] = mapped_column(Integer, nullable=False)  # 1 (negative) or 2 (positive)
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+
+    user = relationship("User", back_populates="feedback")
+    generation_job = relationship("GenerationJob", back_populates="feedback")
