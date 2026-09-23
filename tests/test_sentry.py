@@ -43,11 +43,18 @@ def test_initialize_sentry_init_fails(monkeypatch) -> None:
         initialize_sentry()  # should not raise
 
 
+def test_initialize_sentry_sdk_none(monkeypatch) -> None:
+    """If sentry_sdk is None (not installed), initialize_sentry skips."""
+    from backend.config import settings
+    import backend.monitoring.sentry_init as sentry_mod
+
+    monkeypatch.setattr(settings, "sentry_dsn", "https://test@sentry.io/1")
+    sentry_mod.sentry_sdk = None
+    initialize_sentry()  # should not raise
+
+
 def test_capture_exception_when_disabled() -> None:
     """capture_exception is a no-op when sentry not initialized."""
-    from backend.monitoring.sentry_init import _sentry_initialized
-
-    # Force _sentry_initialized to False
     import backend.monitoring.sentry_init as sentry_mod
     sentry_mod._sentry_initialized = False
     capture_exception(ValueError("test"))  # should not raise

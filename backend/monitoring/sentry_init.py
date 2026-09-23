@@ -9,6 +9,7 @@ are never affected.
 from __future__ import annotations
 
 import logging
+import sys
 
 import structlog
 
@@ -17,6 +18,12 @@ from backend.config import settings
 logger = structlog.get_logger()
 
 _sentry_initialized: bool = False
+
+# Import sentry_sdk lazily — if not installed, all calls are no-ops
+try:
+    import sentry_sdk
+except ImportError:
+    sentry_sdk = None  # type: ignore[assignment]
 
 
 def initialize_sentry() -> None:
@@ -27,8 +34,11 @@ def initialize_sentry() -> None:
         logger.info("sentry_disabled", reason="no DSN configured")
         return
 
+    if sentry_sdk is None:
+        logger.warning("sentry_disabled", reason="sentry_sdk not installed")
+        return
+
     try:
-        import sentry_sdk
         from sentry_sdk.integrations.fastapi import FastApiIntegration
         from sentry_sdk.integrations.logging import LoggingIntegration
         from sentry_sdk.integrations.stdlib import StdlibIntegration
@@ -57,10 +67,9 @@ def initialize_sentry() -> None:
 
 def capture_exception(exc: Exception) -> None:
     """Capture an exception to Sentry if initialized."""
-    if not _sentry_initialized:
+    if not _sentry_initialized or sentry_sdk is None:
         return
     try:
-        import sentry_sdk
         sentry_sdk.capture_exception(exc)
     except Exception:
         pass  # never let Sentry errors break the app
@@ -68,10 +77,9 @@ def capture_exception(exc: Exception) -> None:
 
 def capture_message(message: str, level: str = "error") -> None:
     """Capture a message to Sentry if initialized."""
-    if not _sentry_initialized:
+    if not _sentry_initialized or sentry_sdk is None:
         return
     try:
-        import sentry_sdk
         sentry_sdk.capture_message(message, level=level)
     except Exception:
         pass
