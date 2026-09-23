@@ -358,11 +358,21 @@ Output ONLY the JSON object — no fences, no preamble, no commentary.
 """
 
 
+LANGUAGE_LABELS: dict[str, str] = {
+    "en": "English",
+    "es": "Spanish",
+    "de": "German",
+    "fr": "French",
+    "fi": "Finnish",
+}
+
+
 def assemble_prompt(
     profile: MasterProfileData,
     job_description: str,
     *,
     role_context: str = "",
+    output_language: str = "en",
 ) -> str:
     """Fill the master prompt template with *profile* and *job_description*.
 
@@ -428,4 +438,9 @@ def assemble_prompt(
         role_context=role_context,
         cv_schema=cv_schema_text,
         cover_letter_schema=cover_schema_text,
+        output_language=(
+            f"\n\nOUTPUT LANGUAGE: Respond in {LANGUAGE_LABELS.get(output_language, output_language)}. "
+            f"Use {output_language} language for all content."
+            if output_language != "en" else ""
+        ),
     )

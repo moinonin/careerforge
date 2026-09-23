@@ -132,12 +132,16 @@ class GenerationJob(Base):
     job_title: Mapped[str] = mapped_column(String(255), nullable=False)
     company_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     job_description: Mapped[str] = mapped_column(Text, nullable=False)
+    output_language: Mapped[str] = mapped_column(String(10), default="en", nullable=False)  # en, es, de, fr, fi
     status: Mapped[str] = mapped_column(String(50), default="pending", nullable=False)  # pending | processing | completed | failed
     cv_docx_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     cv_pdf_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     cl_docx_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     cl_pdf_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     at_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    missing_keywords: Mapped[list[str] | None] = mapped_column(
+        JSON, nullable=True
+    )
     tokens_used: Mapped[int | None] = mapped_column(Integer, nullable=True)
     execution_time_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)

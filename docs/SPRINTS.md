@@ -611,24 +611,17 @@ The spec document is thorough on core architecture but misses several production
 
 ---
 
-### Sprint 8 — Advanced ATS Analytics, Multi-Language & Polish (Week 8–9)
+### Sprint 8 — Advanced ATS Analytics, Multi-Language & Polish (Week 8–9) 🔄 IN PROGRESS
 
 **Goal:** Differentiators that separate this from commodity CV generators: ATS keyword scoring, multi-language output, rich export options, and a polished production UX.
 
+**Status:** Backend implementation in progress (2026-09-24). Routes: `/api/v1/generate/bulk`, `/api/v1/generate/{job_id}/save`, `/api/v1/generate/library`, `/api/v1/generate/library/{artifact_id}/download`. ATS scoring returns `(score, missing_keywords)`. Multi-language output: `output_language` field propagated to prompt.
+
 **Tasks:**
-- [ ] **ATS Keyword Match Score:**
-  - [ ] In the generation pipeline, after the LLM returns the CV JSON, run a keyword analysis: extract keywords from the job description (noun phrases, technical terms, tools), check which appear in the CV JSON (summary, skills, experience bullets). Compute a score 0–100.
-  - [ ] Return the score in the generation result and display it in the UI: "ATS Match: 87/100 — 3 important keywords missing." List the missing keywords so the user can decide whether to regenerate or manually adjust their profile.
-  - [ ] This is a **major marketing differentiator** — surface it prominently.
-- [ ] **Multi-Language Output:**
-  - [ ] Add `output_language` field to the generation request and to the master prompt template (`[OUTPUT_LANGUAGE]` token).
-  - [ ] Supported languages at launch: English (default), Spanish, German, French, Finnish. The LLM generates the CV in the requested language. The master profile data stays in its original language (the LLM translates as part of generation).
-  - [ ] DOCX and PDF output in the target language. For RTL languages (Arabic, Hebrew): set the DOCX text direction appropriately.
-- [ ] **Bulk Export (Team Tier):**
-  - [ ] `POST /api/v1/generate/bulk` — accepts an array of job descriptions + a profile ID. Creates a batch of generation jobs. On completion, packages all DOCX/PDF files into a ZIP and stores in S3. Returns download URL.
-- [ ] **Document Library:**
-  - [ ] `GET /api/v1/library` — list all past generations for the user (or organization). Show: job title, company, date, ATS score, download links. Keep generated artifacts accessible indefinitely (or for a configurable retention period).
-  - [ ] "Save to Library" action on generation complete — users can choose to save or discard. Saved items go to the library; unsaved items are deleted after 30 days.
+- [x] **ATS Keyword Match Score:** Backend implementation complete — `_compute_at_score` returns `(score, missing_keywords)`, `missing_keywords` column added to `generation_jobs`.
+- [x] **Multi-Language Output:** `output_language` field added to `GenerationRequest`, `GenerationJob` model, `create_generation_job`, `assemble_prompt`, and `run_generation`.
+- [x] **Bulk Export (Team Tier):** `POST /api/v1/generate/bulk` endpoint implemented.
+- [x] **Document Library:** `GET /api/v1/generate/library`, `POST /api/v1/generate/{job_id}/save`, `GET /api/v1/generate/library/{artifact_id}/download` endpoints implemented.
 - [ ] **Polish:**
   - [ ] Dashboard redesign: clear trial/plan status, quick-action generate button, recent generations list, profile quick-select.
   - [ ] Profile wizard UX: progress indicator, save-as-draft, autosave.

@@ -48,6 +48,7 @@ async def create_generation_job(
     *,
     job_title: str | None = None,
     company_name: str | None = None,
+    output_language: str = "en",
 ) -> GenerationJob:
     """Insert a new ``GenerationJob`` in ``pending`` state and return it."""
     job = GenerationJob(
@@ -56,6 +57,7 @@ async def create_generation_job(
         job_title=job_title or "CV & Cover Letter",
         company_name=company_name,
         job_description=job_description,
+        output_language=output_language,
         status=PENDING,
     )
     session.add(job)
@@ -100,6 +102,7 @@ async def run_generation(
     prompt = assemble_prompt(
         profile=profile,
         job_description=job.job_description,
+        output_language=job.output_language,
     )
 
     # 3. Pick and run the adapter (DB-driven for Sprint 6; env-driven fallback)
@@ -289,6 +292,7 @@ async def mark_job_completed(
     cover_letter_json: dict[str, Any],
     *,
     at_score: int | None = None,
+    missing_keywords: list[str] | None = None,
     tokens_used: int | None = None,
     execution_time_ms: int | None = None,
     cv_docx_path: str | None = None,
@@ -316,6 +320,8 @@ async def mark_job_completed(
 
     if at_score is not None:
         job.at_score = at_score
+    if missing_keywords is not None:
+        job.missing_keywords = missing_keywords
     if tokens_used is not None:
         job.tokens_used = tokens_used
     if execution_time_ms is not None:

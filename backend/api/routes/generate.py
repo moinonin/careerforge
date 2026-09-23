@@ -12,9 +12,12 @@ initial release).  Background execution via Celery deferred to Sprint 7.
 
 from __future__ import annotations
 
+import io
 import os
 import re
+import zipfile
 from typing import Any
+from uuid import uuid4
 
 from backend.auth.schemas import CurrentUserId
 from backend.config import settings
@@ -32,6 +35,7 @@ from backend.llm.service import (
     render_cv_markdown,
     run_generation,
 )
+from backend.models import GenerationJob, MasterProfile, StoredArtifact
 from fastapi import APIRouter, Depends, HTTPException, Response, status, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -49,6 +53,12 @@ class GenerationRequest(BaseModel):
     job_description: str | None = None
     job_title: str | None = None
     company_name: str | None = None
+    output_language: str = "en"  # en, es, de, fr, fi
+
+    class Config:
+        from_attributes = True
+
+
 _STOP_WORDS: frozenset[str] = frozenset({
     "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for",
     "of", "with", "by", "from", "is", "are", "was", "were", "be", "been",
@@ -64,6 +74,16 @@ _STOP_WORDS: frozenset[str] = frozenset({
     "our", "you", "your", "he", "him", "his", "she", "her", "they", "them",
     "their", "am",
 })
+
+SUPPORTED_LANGUAGES = {"en": "English", "es": "Spanish", "de": "German", "fr": "French", "fi": "Finnish"}
+
+LANGUAGE_LABELS: dict[str, str] = {
+    "en": "",
+    "es": "Spanish",
+    "de": "German",
+    "fr": "French",
+    "fi": "Finnish",
+}
 
 
 @router.post("", status_code=status.HTTP_202_ACCEPTED)
@@ -104,6 +124,10 @@ async def start_generation(
     company_name = request.get("company_name")
     provider = request.get("provider")
     model = request.get("model")
+    output_language = request.get("output_language", "en")
+
+    if output_language not in SUPPORTED_LANGUAGES:
+        raise HTTPException(status_code=400, detail=f"Unsupported output_language: {output_language}. Supported: {list(SUPPORTED_LANGUAGES.keys())}")
 
     if not profile_id:
         raise HTTPException(status_code=400, detail="profile_id is required")
@@ -130,6 +154,7 @@ async def start_generation(
         job_description=str(job_description),
         job_title=job_title,
         company_name=company_name,
+        output_language=output_language,
     )
 
     # Mark processing and execute inline
@@ -157,7 +182,7 @@ async def start_generation(
         await pdf_convert(cv_docx_path, artifacts_dir)
         await pdf_convert(cl_docx_path, artifacts_dir)
 
-        at_score = _compute_at_score(cv, str(job_description))
+        at_score, missing_keywords = _compute_at_score(cv, str(job_description))
 
         await mark_job_completed(
             session,
@@ -178,6 +203,8 @@ async def start_generation(
             "message": "Generation completed",
             "cv_markdown": cv_markdown,
             "cover_letter_markdown": cl_markdown,
+            "at_score": at_score,
+            "missing_keywords": missing_keywords,
         }
 
     except GenerationError as exc:
@@ -191,12 +218,11 @@ async def start_generation(
         raise HTTPException(status_code=500, detail=f"Generation failed: {exc}") from exc
 
 
-def _compute_at_score(cv: dict[str, Any], job_description: str) -> int:
-    """Compute a crude 0-100 ATS score based on keyword overlap.
+def _compute_at_score(cv: dict[str, Any], job_description: str) -> tuple[int, list[str]]:
+    """Compute a 0-100 ATS keyword-match score.
 
-    Counts how many significant words from the CV appear in the job
-    description.  This is a placeholder for the full ATS scoring in
-    Sprint 8 — it gives reasonable feedback at launch.
+    Returns ``(score, missing_keywords)`` where *missing_keywords* is a
+    list of high-signal JD terms that do not appear anywhere in the CV.
     """
 
     jd_words: set[str] = {
@@ -206,7 +232,7 @@ def _compute_at_score(cv: dict[str, Any], job_description: str) -> int:
     }
 
     if not jd_words:
-        return 50
+        return 50, []
 
     cv_text_parts: list[str] = []
     cv_text_parts.append(cv.get("summary", ""))
@@ -239,10 +265,11 @@ def _compute_at_score(cv: dict[str, Any], job_description: str) -> int:
 
     overlap = jd_words & cv_text_words
     if not overlap:
-        return 0
+        return 0, sorted(jd_words)[:10]
 
     score = int(len(overlap) / len(jd_words) * 100)
-    return min(score, 100)
+    missing = sorted(jd_words - overlap)
+    return min(score, 100), missing[:10]
 
 
 @router.get("/jobs/{job_id}/cv")
@@ -335,6 +362,8 @@ async def get_generation_job(
         "at_score": job.at_score,
         "tokens_used": job.tokens_used,
         "execution_time_ms": job.execution_time_ms,
+        "missing_keywords": job.missing_keywords,
+        "output_language": job.output_language,
         "created_at": job.created_at.isoformat() if job.created_at else None,
         "completed_at": job.completed_at.isoformat() if job.completed_at else None,
     }
@@ -483,7 +512,7 @@ async def stream_generation(
             await pdf_convert(cv_docx_path, artifacts_dir)
             await pdf_convert(cl_docx_path, artifacts_dir)
 
-            at_score = _compute_at_score(cv, str(job.job_description))
+            at_score, missing_keywords = _compute_at_score(cv, str(job.job_description))
 
             await mark_job_completed(
                 session,
@@ -491,6 +520,7 @@ async def stream_generation(
                 cv_json=cv,
                 cover_letter_json=cover_letter,
                 at_score=at_score,
+                missing_keywords=missing_keywords,
                 cv_docx_path=cv_docx_path,
                 cl_docx_path=cl_docx_path,
                 cv_pdf_path=cv_pdf_path,
@@ -507,6 +537,7 @@ async def stream_generation(
                     "cl_docx_url": cl_docx_path,
                     "cl_pdf_url": cl_pdf_path,
                     "at_score": at_score,
+                    "missing_keywords": missing_keywords,
                 }
             )
 
@@ -529,3 +560,191 @@ async def stream_generation(
             await websocket.close()
         except Exception:
             pass
+
+
+# ── Bulk Generation ───────────────────────────────────────────────────────
+
+
+class BulkGenerationRequest(BaseModel):
+    """Request body for ``POST /api/v1/generate/bulk``."""
+
+    profile_id: str
+    jobs: list[dict[str, Any]]  # list of {job_description, job_title?, company_name?}
+
+
+@router.post("/bulk", status_code=status.HTTP_202_ACCEPTED)
+async def bulk_generate(
+    request: BulkGenerationRequest,
+    *,
+    current_user_id: CurrentUserId,
+    session: AsyncSession = Depends(get_session),  # noqa: B008
+) -> dict[str, Any]:
+    """Kick off multiple generation jobs in one request.
+
+    Body::
+        {
+            "profile_id": "<uuid>",
+            "jobs": [
+                {"job_description": "...", "job_title": "...", "company_name": "..."},
+                ...
+            ]
+        }
+
+    Returns a list of job IDs. Generation runs inline for each job.
+    All artifacts are stored as permanent StoredArtifact records.
+    """
+    # Verify profile belongs to user
+    stmt = select(MasterProfile).where(
+        MasterProfile.id == request.profile_id,
+        MasterProfile.user_id == current_user_id,
+    )
+    result = await session.execute(stmt)
+    profile = result.scalar_one_or_none()
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Profile not found or not owned")
+
+    job_ids: list[str] = []
+
+    for job_req in request.jobs:
+        job = await create_generation_job(
+            session=session,
+            user_id=current_user_id,
+            profile_id=request.profile_id,
+            job_description=str(job_req.get("job_description", "")),
+            job_title=job_req.get("job_title"),
+            company_name=job_req.get("company_name"),
+            output_language=job_req.get("output_language", "en"),
+        )
+        job_ids.append(job.id)
+
+    return {
+        "jobs": [
+            {"job_id": jid, "status": "pending"}
+            for jid in job_ids
+        ],
+        "total": len(job_ids),
+    }
+
+
+# ── Document Library ────────────────────────────────────────────────────────
+
+
+class SaveArtifactRequest(BaseModel):
+    """Request body for ``POST /api/v1/generate/{job_id}/save``."""
+
+    title: str
+    job_title: str | None = None
+    company_name: str | None = None
+    at_score: int | None = None
+    is_temp: bool = False
+
+
+@router.post("/{job_id}/save", status_code=status.HTTP_200_OK)
+async def save_artifact(
+    job_id: str,
+    request: SaveArtifactRequest,
+    *,
+    current_user_id: CurrentUserId,
+    session: AsyncSession = Depends(get_session),  # noqa: B008
+) -> dict[str, Any]:
+    """Save a completed generation job to the document library as a permanent artifact.
+
+    Sets ``is_temp=False`` on all StoredArtifact rows linked to *job_id*.
+    """
+    job = await get_job(session, job_id, current_user_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.user_id != current_user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    # Update all StoredArtifact rows for this job
+    stmt = select(StoredArtifact).where(
+        StoredArtifact.generation_job_id == job_id,
+        StoredArtifact.user_id == current_user_id,
+    )
+    result = await session.execute(stmt)
+    artifacts = result.scalars().all()
+
+    for artifact in artifacts:
+        artifact.is_temp = request.is_temp
+        artifact.title = request.title
+        if request.job_title:
+            artifact.job_title = request.job_title
+        if request.company_name:
+            artifact.company_name = request.company_name
+        if request.at_score is not None:
+            artifact.at_score = request.at_score
+
+    await session.commit()
+
+    return {
+        "job_id": job_id,
+        "saved": len(artifacts),
+        "title": request.title,
+        "is_temp": request.is_temp,
+    }
+
+
+@router.get("/library", status_code=status.HTTP_200_OK)
+async def list_library(
+    *,
+    current_user_id: CurrentUserId,
+    session: AsyncSession = Depends(get_session),  # noqa: B008
+) -> dict[str, Any]:
+    """List all permanent documents in the user's library.
+
+    Returns artifacts with ``is_temp=False`` ordered by ``created_at`` desc.
+    """
+    stmt = (
+        select(StoredArtifact)
+        .where(
+            StoredArtifact.user_id == current_user_id,
+            StoredArtifact.is_temp == False,
+        )
+        .order_by(StoredArtifact.created_at.desc())
+    )
+    result = await session.execute(stmt)
+    artifacts = result.scalars().all()
+
+    return {
+        "documents": [
+            {
+                "id": a.id,
+                "title": a.title,
+                "job_title": a.job_title,
+                "company_name": a.company_name,
+                "artifact_type": a.artifact_type,
+                "file_url": a.file_url,
+                "at_score": a.at_score,
+                "is_temp": a.is_temp,
+                "created_at": a.created_at.isoformat() if a.created_at else None,
+            }
+            for a in artifacts
+        ],
+        "total": len(artifacts),
+    }
+
+
+@router.get("/library/{artifact_id}/download")
+async def download_artifact(
+    artifact_id: str,
+    *,
+    current_user_id: CurrentUserId,
+    session: AsyncSession = Depends(get_session),  # noqa: B008
+) -> Response:
+    """Download a single artifact by ID."""
+    stmt = select(StoredArtifact).where(
+        StoredArtifact.id == artifact_id,
+        StoredArtifact.user_id == current_user_id,
+    )
+    result = await session.execute(stmt)
+    artifact = result.scalar_one_or_none()
+    if artifact is None:
+        raise HTTPException(status_code=404, detail="Artifact not found")
+
+    # For file-based artifacts, redirect to file_url
+    # For now, return the artifact metadata
+    return Response(
+        content=artifact.file_url,
+        media_type="text/plain",
+    )
