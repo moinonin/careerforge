@@ -9,7 +9,7 @@ import { logout, getMe } from "@/lib/auth"
 const LLM_PROVIDERS = [
   { id: "openai", name: "OpenAI", models: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo"], requiresKey: true },
   { id: "anthropic", name: "Anthropic", models: ["claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022", "claude-3-opus-20240229"], requiresKey: true },
-  { id: "ollama", name: "Ollama (Local)", models: ["llama3.1:70b", "llama3.1:8b", "mistral:7b", "codellama:7b"], requiresKey: false },
+  { id: "ollama", name: "Ollama (Local)", models: [], requiresKey: false },
   { id: "custom", name: "Custom OpenAI-Compatible", models: [], requiresKey: true },
 ] as const
 
@@ -148,6 +148,8 @@ function SettingsTab() {
     is_active: true,
   })
   const [testResults, setTestResults] = useState<Record<string, { success: boolean; message: string; loading: boolean; latency_ms: number | null }>>({})
+  const [ollamaModels, setOllamaModels] = useState<string[]>([])
+  const [ollamaLoading, setOllamaLoading] = useState(false)
 
   useEffect(() => {
     loadConfigs()
@@ -157,18 +159,38 @@ function SettingsTab() {
     try {
       const data = await listLLMConfigs()
       setConfigs(data)
+      await fetchOllamaModels()
     } catch (err) {
       console.error("Failed to load LLM configs:", err)
+    }
+  }
+
+  async function fetchOllamaModels() {
+    setOllamaLoading(true)
+    try {
+      const res = await fetch("/api/v1/llm-config/models")
+      const data = await res.json()
+      if (data.models) {
+        const names = data.models.map((m: any) => m.name)
+        setOllamaModels(names)
+      }
+    } catch {
+      setOllamaModels([])
+    } finally {
+      setOllamaLoading(false)
     }
   }
 
   function handleProviderChange(providerId: string) {
     const provider = LLM_PROVIDERS.find(p => p.id === providerId)
     if (provider) {
+      const models = providerId === "ollama" && ollamaModels.length > 0
+        ? ollamaModels
+        : provider.models
       setFormData(prev => ({
         ...prev,
         provider: providerId,
-        model_name: provider.models[0] || "",
+        model_name: models[0] || "",
         base_url: providerId === "ollama" ? "http://localhost:11434/v1" : "",
       }))
     }
@@ -312,18 +334,37 @@ function SettingsTab() {
             </div>
 
             <div className="dashboard-form-group">
-              <label htmlFor="model_name" className="dashboard-form-label">Model</label>
+              <label htmlFor="model_name" className="dashboard-form-label">
+                Model
+                {formData.provider === "ollama" && (
+                                  <button
+                                    type="button"
+                                    onClick={fetchOllamaModels}
+                                    disabled={ollamaLoading}
+                                    className="dashboard-refresh-btn"
+                                    title="Refresh models from local Ollama"
+                                    style={{
+                                      background: "none", border: "1px solid rgba(0,0,0,0.15)",
+                                      borderRadius: "4px", padding: "2px 8px", cursor: "pointer",
+                                      fontSize: "14px", marginLeft: "8px",
+                                      opacity: ollamaLoading ? 0.5 : 1,
+                                    }}
+                                  >
+                                    {ollamaLoading ? "⟳" : "↻"}
+                                  </button>
+                                )}
+              </label>
               <select
                 id="model_name"
                 value={formData.model_name}
                 onChange={e => setFormData(prev => ({ ...prev, model_name: e.target.value }))}
                 className="dashboard-form-select"
               >
-                {LLM_PROVIDERS.find(p => p.id === formData.provider)?.models.map(m => (
+                {(formData.provider === "ollama" ? ollamaModels : LLM_PROVIDERS.find(p => p.id === formData.provider)?.models ?? []).map(m => (
                   <option key={m} value={m}>{m}</option>
                 ))}
               </select>
-              {LLM_PROVIDERS.find(p => p.id === formData.provider)?.models.length === 0 && (
+              {(formData.provider === "ollama" ? ollamaModels : LLM_PROVIDERS.find(p => p.id === formData.provider)?.models ?? []).length === 0 && (
                 <input
                   type="text"
                   id="model_name"
@@ -333,6 +374,9 @@ function SettingsTab() {
                   placeholder="Enter model name (e.g., gpt-4o, llama3.1:70b)"
                   required
                 />
+              )}
+              {formData.provider === "ollama" && ollamaModels.length === 0 && !ollamaLoading && (
+                <p className="dashboard-form-hint">Click ↻ to load models from local Ollama</p>
               )}
             </div>
 

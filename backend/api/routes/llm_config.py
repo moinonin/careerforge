@@ -7,11 +7,13 @@ Endpoints:
   PUT    /api/v1/llm-config/{config_id}  — update config
   DELETE /api/v1/llm-config/{config_id}  — delete config
   POST   /api/v1/llm-config/{config_id}/test — test connectivity
+  GET    /api/v1/llm/models              — list available Ollama models
 """
 
 from __future__ import annotations
 
-from typing import Annotated
+import os
+from typing import Annotated, Any
 
 from backend.auth.schemas import CurrentUserId
 from backend.database import get_session
@@ -293,7 +295,48 @@ async def test_llm_config(
         )
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+# ── Ollama Models ───────────────────────────────────────────────────────
+
+
+class OllamaModel(BaseModel):
+    """A single model returned by Ollama's /api/tags."""
+    name: str
+    model: str
+    modified_at: str | None = None
+    size: int | None = None
+    details: dict[str, Any] | None = None
+    capabilities: list[str] | None = None
+
+
+class OllamaModelsResponse(BaseModel):
+    """Response from the Ollama models endpoint."""
+    models: list[OllamaModel]
+
+
+@router.get("/models", response_model=OllamaModelsResponse)
+async def list_ollama_models() -> OllamaModelsResponse:
+    """List available models from the local Ollama instance.
+
+    Calls Ollama's /api/tags endpoint and returns model names.
+    Returns an empty list if Ollama is not reachable.
+    """
+    import httpx
+
+    base_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            r = await client.get(f"{base_url}/api/tags")
+            r.raise_for_status()
+            data = r.json()
+            raw_models = data.get("models", [])
+            return OllamaModelsResponse(
+                models=[OllamaModel(**m) for m in raw_models]
+            )
+    except Exception:
+        return OllamaModelsResponse(models=[])
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────
 
 
 async def _deactivate_user_configs(session: AsyncSession, user_id: str) -> None:
