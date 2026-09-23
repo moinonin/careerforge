@@ -121,7 +121,7 @@ def create_app() -> FastAPI:
     app.include_router(analyzer_router, prefix="/api/v1/analyzer", tags=["analyzer"])
     app.include_router(billing_router, prefix="/api/v1/billing", tags=["billing"])
     app.include_router(admin_router, tags=["admin"])
-    app.include_router(feedback_router, tags=["feedback"])
+    app.include_router(feedback_router)
 
     @app.get("/health", include_in_schema=False)
     async def health_check() -> dict:

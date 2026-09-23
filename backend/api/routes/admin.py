@@ -1,8 +1,4 @@
-"""Admin dashboard APIs — user list and generation log.
-
-Bundled in ``backend.main`` via ``app.include_router(admin_router)``.
-Requires admin role; non-admin requests return 403.
-"""
+"""Admin dashboard APIs — user list, generation log, and metrics."""
 
 from __future__ import annotations
 
@@ -14,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth.schemas import CurrentUserId
 from backend.database import get_session
-from backend.models import User, GenerationJob
+from backend.models import User, GenerationJob, GenerationMetric
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
 
@@ -42,12 +38,10 @@ async def admin_user_list(
     """List all users with pagination."""
     offset = (page - 1) * page_size
 
-    # Get total count
     count_stmt = select(func.count(User.id))
     total_result = await session.execute(count_stmt)
     total = total_result.scalar_one()
 
-    # Get users ordered by creation date
     stmt = (
         select(User)
         .order_by(User.created_at.desc())
@@ -89,7 +83,6 @@ async def admin_generation_log(
     """List generation jobs with optional status filter."""
     offset = (page - 1) * page_size
 
-    # Build query
     stmt = select(GenerationJob)
     count_stmt = select(func.count(GenerationJob.id))
 
@@ -130,4 +123,38 @@ async def admin_generation_log(
             "total": total,
             "total_pages": (total + page_size - 1) // page_size,
         },
+    }
+
+
+@router.get("/metrics")
+async def admin_metrics(
+    session: AsyncSession = Depends(get_session),  # noqa: B008
+) -> dict:
+    """Return generation metrics for admin dashboard."""
+    total_stmt = select(func.count()).select_from(GenerationJob)
+    total_result = await session.execute(total_stmt)
+    total_generations = total_result.scalar_one()
+
+    provider_stmt = select(GenerationJob.provider, func.count()).group_by(GenerationJob.provider)
+    provider_result = await session.execute(provider_stmt)
+    providers = {row[0]: row[1] for row in provider_result.all()}
+
+    at_stmt = select(func.avg(GenerationJob.at_score))
+    at_result = await session.execute(at_stmt)
+    avg_ats = at_result.scalar_one()
+
+    metric_stmt = select(func.count()).select_from(GenerationMetric)
+    metric_result = await session.execute(metric_stmt)
+    total_metrics = metric_result.scalar_one()
+
+    tokens_stmt = select(func.avg(GenerationMetric.tokens_used))
+    tokens_result = await session.execute(tokens_stmt)
+    avg_tokens = tokens_result.scalar_one()
+
+    return {
+        "total_generations": total_generations,
+        "total_metrics": total_metrics,
+        "generations_by_provider": providers,
+        "average_at_score": round(avg_ats, 1) if avg_ats else None,
+        "average_tokens_used": round(avg_tokens, 1) if avg_tokens else None,
     }

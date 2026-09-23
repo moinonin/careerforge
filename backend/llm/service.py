@@ -49,6 +49,8 @@ async def create_generation_job(
     job_title: str | None = None,
     company_name: str | None = None,
     output_language: str = "en",
+    provider: str | None = None,
+    model: str | None = None,
 ) -> GenerationJob:
     """Insert a new ``GenerationJob`` in ``pending`` state and return it."""
     job = GenerationJob(
@@ -59,6 +61,8 @@ async def create_generation_job(
         job_description=job_description,
         output_language=output_language,
         status=PENDING,
+        provider=provider,
+        model_name=model,
     )
     session.add(job)
     await session.commit()

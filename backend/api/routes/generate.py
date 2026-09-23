@@ -201,6 +201,8 @@ async def start_generation(
         job_title=job_title,
         company_name=company_name,
         output_language=output_language,
+        provider=provider,
+        model=model,
     )
 
     # Mark processing and execute inline
@@ -254,8 +256,8 @@ async def start_generation(
             organization_id=org_id or "",
             user_id=current_user_id,
             generation_job_id=job.id,
-            provider=provider or "system_default",
-            model_name=model or "unknown",
+            provider=job.provider or "system_default",
+            model_name=job.model_name or "unknown",
             output_language=output_language,
             export_format="both",
             at_score=at_score,
@@ -682,6 +684,8 @@ async def bulk_generate(
             job_title=raw_title,
             company_name=raw_company,
             output_language=job_req.get("output_language", "en"),
+            provider=job_req.get("provider"),
+            model=job_req.get("model"),
         )
         job_ids.append(job.id)
 

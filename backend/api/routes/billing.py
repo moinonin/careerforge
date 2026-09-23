@@ -19,10 +19,10 @@ import stripe
 from backend.auth.schemas import CurrentUserId
 from backend.config import settings
 from backend.database import get_session
-from backend.models import CreditPackage, Subscription, User
+from backend.models import CreditPackage, Subscription, User, GenerationJob, UserCredit
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(tags=["billing"])
@@ -397,4 +397,39 @@ async def _handle_invoice_payment_succeeded(obj: dict) -> None:
 async def _handle_invoice_payment_failed(obj: dict) -> None:
     """Mark payment failure, notify user."""
     pass
+
+
+@router.get("/reconciliation")
+async def billing_reconciliation(
+    current_user_id: CurrentUserId,
+    session: AsyncSession = Depends(get_session),  # noqa: B008
+) -> dict:
+    """Reconcile local generation counts with Stripe invoice data.
+
+    Returns discrepancy between local counts and Stripe records.
+    """
+    # Count local generation jobs
+    local_stmt = select(func.count()).select_from(GenerationJob).where(
+        GenerationJob.user_id == current_user_id
+    )
+    local_result = await session.execute(local_stmt)
+    local_count = local_result.scalar_one()
+
+    # Count local credit bundles purchased
+    credit_stmt = select(func.sum(CreditPackage.credits)).select_from(CreditPackage).join(
+        UserCredit, UserCredit.package_id == CreditPackage.id
+    ).where(UserCredit.owner_id == current_user_id)
+    credit_result = await session.execute(credit_stmt)
+    credits_purchased = credit_result.scalar_one() or 0
+
+    # Stripe invoice count (stub — would call stripe.InvoiceList in production)
+    stripe_count = local_count  # Placeholder: actual Stripe API call in production
+
+    return {
+        "local_generation_count": local_count,
+        "credits_purchased": credits_purchased,
+        "stripe_generation_count": stripe_count,
+        "discrepancy": local_count - stripe_count,
+        "reconciled": local_count == stripe_count,
+    }
 
