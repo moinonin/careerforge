@@ -36,6 +36,7 @@ from backend.llm.service import (
     run_generation,
 )
 from backend.models import GenerationJob, MasterProfile, StoredArtifact
+from backend.validators.sanitization import sanitize_text  # noqa: E402
 from fastapi import APIRouter, Depends, HTTPException, Response, status, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -133,6 +134,11 @@ async def start_generation(
         raise HTTPException(status_code=400, detail="profile_id is required")
     if not job_description or not str(job_description).strip():
         raise HTTPException(status_code=400, detail="job_description is required")
+
+    # Sanitize all user-provided text before DB/LLM
+    job_description = sanitize_text(str(job_description))
+    job_title = sanitize_text(str(job_title)) if job_title else ""
+    company_name = sanitize_text(str(company_name)) if company_name else ""
 
     # Verify profile ownership
     from backend.models import MasterProfile
@@ -606,13 +612,16 @@ async def bulk_generate(
     job_ids: list[str] = []
 
     for job_req in request.jobs:
+        raw_desc = sanitize_text(str(job_req.get("job_description", "")))
+        raw_title = sanitize_text(str(job_req.get("job_title"))) if job_req.get("job_title") else ""
+        raw_company = sanitize_text(str(job_req.get("company_name"))) if job_req.get("company_name") else ""
         job = await create_generation_job(
             session=session,
             user_id=current_user_id,
             profile_id=request.profile_id,
-            job_description=str(job_req.get("job_description", "")),
-            job_title=job_req.get("job_title"),
-            company_name=job_req.get("company_name"),
+            job_description=raw_desc,
+            job_title=raw_title,
+            company_name=raw_company,
             output_language=job_req.get("output_language", "en"),
         )
         job_ids.append(job.id)
@@ -657,6 +666,11 @@ async def save_artifact(
     if job.user_id != current_user_id:
         raise HTTPException(status_code=403, detail="Forbidden")
 
+    # Sanitize user-provided text
+    sanitized_title = sanitize_text(request.title)
+    sanitized_job_title = sanitize_text(request.job_title) if request.job_title else None
+    sanitized_company = sanitize_text(request.company_name) if request.company_name else None
+
     # Update all StoredArtifact rows for this job
     stmt = select(StoredArtifact).where(
         StoredArtifact.generation_job_id == job_id,
@@ -667,11 +681,11 @@ async def save_artifact(
 
     for artifact in artifacts:
         artifact.is_temp = request.is_temp
-        artifact.title = request.title
+        artifact.title = sanitized_title
         if request.job_title:
-            artifact.job_title = request.job_title
+            artifact.job_title = sanitized_job_title
         if request.company_name:
-            artifact.company_name = request.company_name
+            artifact.company_name = sanitized_company
         if request.at_score is not None:
             artifact.at_score = request.at_score
 
