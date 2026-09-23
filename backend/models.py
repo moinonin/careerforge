@@ -96,13 +96,19 @@ class Subscription(Base):
 class LLMConfig(Base):
     __tablename__ = "llm_configs"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default="gen_random_uuid()")
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: __import__("uuid").uuid4().hex)
     user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     provider: Mapped[str] = mapped_column(String(50), nullable=False)  # system_default | openai | anthropic | ollama | custom
     base_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     api_key_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
     model_name: Mapped[str] = mapped_column(String(100), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC), nullable=False
+    )
 
     user = relationship("User", back_populates="llm_configs")
 

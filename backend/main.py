@@ -17,6 +17,7 @@ from backend.api.routes import health  # noqa: E402
 from backend.api.routes.analyzer import router as analyzer_router  # noqa: E402
 from backend.api.routes.billing import router as billing_router  # noqa: E402
 from backend.api.routes.generate import router as generate_router  # noqa: E402
+from backend.api.routes.llm_config import router as llm_config_router  # noqa: E402
 from backend.auth.router import router as auth_router  # noqa: E402
 from backend.auth.router import users_router  # noqa: E402
 from backend.config import settings  # noqa: E402
@@ -91,6 +92,7 @@ def create_app() -> FastAPI:
     app.include_router(users_router, prefix="/api/v1/users", tags=["users"])
     app.include_router(profiles_router, prefix="/api/v1/profiles", tags=["profiles"])
     app.include_router(generate_router, prefix="/api/v1/generate", tags=["generation"])
+    app.include_router(llm_config_router, prefix="/api/v1/llm-config", tags=["llm-config"])
     app.include_router(analyzer_router, prefix="/api/v1/analyzer", tags=["analyzer"])
     app.include_router(billing_router, prefix="/api/v1/billing", tags=["billing"])
 

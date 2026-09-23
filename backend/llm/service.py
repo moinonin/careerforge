@@ -102,14 +102,18 @@ async def run_generation(
         job_description=job.job_description,
     )
 
-    # 3. Pick and run the adapter (env-driven for Sprint 3; DB-driven in Sprint 6)
-    effective_provider = provider or os.environ.get("LLM_PROVIDER", "openai")
-    effective_model = model or os.environ.get("LLM_MODEL", "")
+    # 3. Pick and run the adapter (DB-driven for Sprint 6; env-driven fallback)
+    from backend.llm.router import build_adapter_from_config
 
-    adapter = build_adapter(effective_provider)
+    adapter, effective_provider, effective_model = await build_adapter_from_config(
+        session,
+        job.user_id,
+        provider_slug=provider,
+        model=model,
+    )
 
     # 4. Generate — the adapter handles JSON parse + full validation (top-level
-    #    AND sub-objects) + retries.  After it returns, the data is fully valid.
+    #    AND sub-objects) + retries. After it returns, the data is fully valid.
     combined_schema: dict[str, Any] = {
         "type": "object",
         "properties": {
