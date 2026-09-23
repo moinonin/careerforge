@@ -19,8 +19,8 @@ async def mock_get_session():
 
 
 @pytest.fixture(autouse=True)
-def mock_db():
-    """Patch get_session before app import."""
+def _mock_db():
+    """Patch get_session for all tests in this module."""
     with patch("backend.database.get_session", side_effect=mock_get_session()):
         yield
 
