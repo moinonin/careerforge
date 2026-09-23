@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth, useAuthLoading } from "@/lib/auth-context"
+import { getToken } from "@/lib/token-store"
 import { logout, getMe } from "@/lib/auth"
 
 const LLM_PROVIDERS = [
@@ -53,7 +54,7 @@ async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T
 }
 
 async function getAuthHeaders(): Promise<Record<string, string>> {
-  const token = localStorage.getItem("access_token")
+  const token = getToken()
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
