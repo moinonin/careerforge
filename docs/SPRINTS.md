@@ -547,7 +547,7 @@ The spec document is thorough on core architecture but misses several production
 
 ---
 
-### Sprint 6 — LLM Agnosticism: BYOK, Local LLM & WebSocket Streaming (Week 6–7) 🚧 IN PROGRESS
+### Sprint 6 — LLM Agnosticism: BYOK, Local LLM & WebSocket Streaming (Week 6–7) ✅ COMPLETED
 
 **Goal:** Users are not locked into the platform's LLM. They can bring their own API key or connect to a local Ollama/vLLM instance. Real-time token streaming for a premium UX.
 
