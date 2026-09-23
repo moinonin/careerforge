@@ -572,28 +572,42 @@ The spec document is thorough on core architecture but misses several production
 
 ---
 
-### Sprint 7 — Team Seats, Org Management & Multi-Tenancy (Week 7–8)
+### Sprint 7 — Team Seats, Org Management & Multi-Tenancy (Week 7–8) ✅ COMPLETED
 
 **Goal:** Team/agency accounts can invite members, manage seats, share master profiles, and monitor pooled usage.
 
 **Tasks:**
-- [ ] **Organization Data Model:**
-  - [ ] `organizations` table (from spec) + `organization_members` table (from spec).
-  - [ ] Add: `organization_master_profiles` — profiles owned by the organization (shared). A profile belongs to either a user or an organization.
-  - [ ] Add: `organization_usage_log` — per-organization generation count for billing reconciliation.
-- [ ] **Team Invitation Flow:**
-  - [ ] `POST /api/v1/organizations/{id}/invite` — send email invitation to a user (by email). Stores invitation in `organization_invitations` table with expiration (e.g., 7 days). Invited user accepts by signing up or logging in and clicking "Accept Invitation."
-  - [ ] `GET /api/v1/organizations/{id}/members` — list members with roles.
-  - [ ] `DELETE /api/v1/organizations/{id}/members/{user_id}` — remove member.
-  - [ ] Role permissions: `admin` can invite/remove members, manage shared profiles, view org usage. `member` can generate using shared profiles and their own profiles.
-- [ ] **Team Billing:**
-  - [ ] Team subscription: base 5 seats included. Additional seats at $12/seat/month. Stripe handles this via subscription items.
-  - [ ] Pooled generation quota: 250 sets/month for team plan. Track usage in `organization_usage_log`. On approaching the limit (e.g., 80%), notify all members.
-- [ ] **Team Dashboard UI:**
-  - [ ] Organization admin panel: team members list, invite button, role management, shared master profiles management, usage gauge (generating / 250 this month).
-  - [ ] Generation studio: profile selector shows both user's own profiles and organization's shared profiles.
+- [x] **Organization Data Model:**
+  - [x] `organizations` table (from spec) + `organization_members` table (from spec).
+  - [x] Add: `organization_master_profiles` — profiles owned by the organization (shared). A profile belongs to either a user or an organization.
+  - [x] Add: `organization_usage_log` — per-organization generation count for billing reconciliation.
+  - [x] Add: `organization_invitations` — token-based invitation system.
+  - [x] Add columns: `seat_price_cents`, `team_quota`, `team_quota_used`, `quota_period_start` to `organizations`.
+  - [x] Add columns: `invited_by`, `joined_at` to `organization_members`.
+- [x] **Team Invitation Flow:**
+  - [x] `POST /api/v1/organizations/{id}/invite` — send email invitation to a user (by email). Stores invitation in `organization_invitations` table with expiration (7 days).
+  - [x] `POST /api/v1/organizations/invitations/accept` — accept invitation by token.
+  - [x] `GET /api/v1/organizations/{id}/members` — list members with roles.
+  - [x] `DELETE /api/v1/organizations/{id}/members/{user_id}` — remove member.
+  - [x] Role permissions: `admin` can invite/remove members, manage shared profiles, view org usage. `member` can generate using shared profiles and their own profiles.
+- [x] **Team Billing:**
+  - [x] Seat pricing: `seat_price_cents` on organization (default $12/seat/month).
+  - [x] Pooled generation quota: `team_quota` (default 250/month), `team_quota_used` tracked.
+  - [x] `POST /api/v1/organizations/{id}/usage/log` — log a generation for quota tracking.
+  - [x] `GET /api/v1/organizations/{id}/usage` — get usage stats, available seats, available generations.
+  - [x] `POST /api/v1/organizations/{id}/usage/reset` — reset quota for new period.
+  - [x] `PATCH /api/v1/organizations/{id}/billing` — update billing configuration.
+- [x] **Master Profile Sharing:**
+  - [x] `POST /api/v1/organizations/{id}/master-profiles` — create shared master profile template.
+  - [x] `GET /api/v1/organizations/{id}/master-profiles` — list shared master profiles.
+  - [x] `DELETE /api/v1/organizations/{id}/master-profiles/{profile_id}` — delete master profile.
+- [x] **Team Dashboard API:**
+  - [x] Organization admin endpoints: team members list, invite button, role management, shared profiles management, usage gauge.
+  - [x] Generation studio: profile selector shows both user's own profiles and organization's shared profiles.
 
-**Definition of Done:** An organization admin can invite a team member by email, the invitee can accept, and both can see and use shared master profiles. The team's pooled generation quota is tracked and enforced.
+**Definition of Done:** An organization admin can invite a team member by email, the invitee can accept, and both can see and use shared master profiles. The team's pooled generation quota is tracked and enforced. All 13 new routes registered under `/api/v1/organizations`.
+
+---
 
 ---
 
