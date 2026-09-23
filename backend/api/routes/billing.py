@@ -348,6 +348,7 @@ async def get_subscription(
 
 @router.get("/credit-bundles")
 async def list_credit_bundles(
+    current_user_id: CurrentUserId,
     session: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> list[dict]:
     """List all active credit packages."""

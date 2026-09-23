@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { getToken } from "@/lib/token-store";
 
 interface BillingData {
   plan_tier: string;
@@ -68,7 +69,10 @@ export default function BillingPage() {
     try {
       const res = await fetch("/api/v1/billing/checkout-session", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
+        },
         body: JSON.stringify({
           type,
           credit_package_id: creditPackageId,
@@ -213,6 +217,10 @@ export default function BillingPage() {
               onClick={async () => {
                 const res = await fetch("/api/v1/billing/cancel", {
                   method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
+                  },
                 });
                 if (res.ok) {
                   fetchBilling();
