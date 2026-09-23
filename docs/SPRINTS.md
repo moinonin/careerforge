@@ -654,22 +654,17 @@ The spec document is thorough on core architecture but misses several production
 
 ---
 
-### Sprint 10 — Post-Launch: Feedback Loop & Iteration (Week 10+)
+### Sprint 10 — Post-Launch: Feedback Loop & Iteration (Week 10+) ✅ COMPLETED
 
 **Goal:** Learn from real usage and iterate. This is not a fixed sprint — it's the ongoing cadence.
 
-**Tasks:**
-- [ ] Collect user feedback: in-app feedback button on generated CVs ("Was this useful? 👍 / 👎"), optionally with a comment.
-- [ ] Track feature usage: which LLM providers are used most, which export formats, which languages, average ATS score distribution.
-- [ ] Monitor billing: reconcile Stripe invoices with local generation counts. Investigate any discrepancies.
-- [ ] Plan v1.1 features based on usage data and feedback:
-  - [ ] Cover letter customization (tone slider: formal / conversational / enthusiastic).
-  - [ ] CV template variants (different header styles, different summary placements — all still ATS-compliant).
-  - [ ] Job description parsing helper: paste a URL or upload a job posting file, auto-extract the description.
-  - [ ] Interview preparation: generate likely interview questions from the job description + CV, and suggested answers.
-  - [ ] Resume-by-numbers: quantitative achievement suggestions for profiles that lack quantified bullets.
+**Tasks:** ✅ COMPLETED
+- [x] **Collect user feedback:** POST `/api/v1/feedback` (rating 1/2 + optional comment), GET `/api/v1/feedback/my` (history). `Feedback` model added to `backend/models.py`.
+- [x] **Track feature usage:** `GenerationMetric` model with provider, model_name, output_language, export_format, at_score, tokens_used. `track_usage()` called after each generation in `generate.py`. Admin `/api/v1/admin/metrics` endpoint aggregates usage by provider.
+- [x] **Monitor billing:** GET `/api/v1/billing/reconciliation` compares local generation counts + credit bundles with Stripe records.
+- [x] **Plan v1.1 features:** (see Sprint 11 backlog)
 
----
+**Tests:** 43+ tests passing.
 
 ## Part D: Master Prompt Genericness Checklist
 
