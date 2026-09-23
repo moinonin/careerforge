@@ -39,3 +39,32 @@ Thumbs.db
 
 # Docs / local
 docs/.sprint-logs/
+
+# Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.turbo/
+
+# Environment
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Build artifacts
+artifacts/
+dist/
+build/
+*.egg-info/
+
+# Lock files (managed by package managers)
+uv.lock
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+
+# IDE
+.vscode/
+.idea/

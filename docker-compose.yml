@@ -1,0 +1,153 @@
+version: "3.9"
+
+services:
+  # ── PostgreSQL ───────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: careerforge-postgres
+    environment:
+      POSTGRES_USER: careerforge
+      POSTGRES_PASSWORD: careerforge
+      POSTGRES_DB: careerforge
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U careerforge -d careerforge"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ── Redis ────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: careerforge-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ── Backend (FastAPI + uvicorn) ─────────────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: careerforge-backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      CAREERFORGE_DB_URL: postgresql+asyncpg://careerforge:careerforge@postgres:5432/careerforge
+      CAREERFORGE_REDIS_URL: redis://redis:6379/0
+      CAREERFORGE_BROKER_URL: redis://redis:6379/0
+      CAREERFORGE_RESULT_BACKEND: redis://redis:6379/0
+      CAREERFORGE_ENVIRONMENT: development
+      CAREERFORGE_DEBUG: "true"
+      CAREERFORGE_CORS_ORIGINS: http://localhost:3000
+      CAREERFORGE_JWT_SECRET: change-me-in-production-please
+      CAREERFORGE_ACCESS_TOKEN_EXPIRE_MINUTES: "60"
+      CAREERFORGE_REFRESH_TOKEN_EXPIRE_DAYS: "7"
+      CAREERFORGE_DEFAULT_LLM_PROVIDER: openai
+      CAREERFORGE_DEFAULT_LLM_MODEL: gpt-4o-mini
+      CAREERFORGE_EMAIL_PROVIDER: resend
+      CAREERFORGE_EMAIL_FROM_ADDRESS: noreply@careerforge.ai
+      CAREERFORGE_EMAIL_FROM_NAME: CareerForge AI
+      CAREERFORGE_S3_BUCKET_NAME: careerforge-documents
+      CAREERFORGE_S3_REGION: us-east-1
+      # Supply real keys via .env / docker-compose.override.yml in dev
+      CAREERFORGE_OPENAI_API_KEY: ${CAREERFORGE_OPENAI_API_KEY:-}
+      CAREERFORGE_ANTHROPIC_API_KEY: ${CAREERFORGE_ANTHROPIC_API_KEY:-}
+      CAREERFORGE_EMAIL_API_KEY: ${CAREERFORGE_EMAIL_API_KEY:-}
+      CAREERFORGE_STRIPE_SECRET_KEY: ${CAREERFORGE_STRIPE_SECRET_KEY:-}
+      CAREERFORGE_STRIPE_WEBHOOK_SECRET: ${CAREERFORGE_STRIPE_WEBHOOK_SECRET:-}
+      CAREERFORGE_STRIPE_PUBLISHABLE_KEY: ${CAREERFORGE_STRIPE_PUBLISHABLE_KEY:-}
+      CAREERFORGE_ENCRYPTION_KEY_ID: ${CAREERFORGE_ENCRYPTION_KEY_ID:-}
+      CAREERFORGE_S3_ENDPOINT_URL: ${CAREERFORGE_S3_ENDPOINT_URL:-}
+      CAREERFORGE_S3_ACCESS_KEY_ID: ${CAREERFORGE_S3_ACCESS_KEY_ID:-}
+      CAREERFORGE_S3_SECRET_ACCESS_KEY: ${CAREERFORGE_S3_SECRET_ACCESS_KEY:-}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app/backend:ro
+    command: >
+      uvicorn backend.main:app
+        --host 0.0.0.0
+        --port 8000
+        --reload
+        --log-level info
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ── Worker (Celery) ─────────────────────────────────────────────────────
+  worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: careerforge-worker
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      CAREERFORGE_DB_URL: postgresql+asyncpg://careerforge:careerforge@postgres:5432/careerforge
+      CAREERFORGE_REDIS_URL: redis://redis:6379/0
+      CAREERFORGE_BROKER_URL: redis://redis:6379/0
+      CAREERFORGE_RESULT_BACKEND: redis://redis:6379/0
+      CAREERFORGE_ENVIRONMENT: development
+      CAREERFORGE_S3_BUCKET_NAME: careerforge-documents
+      CAREERFORGE_S3_REGION: us-east-1
+      CAREERFORGE_OPENAI_API_KEY: ${CAREERFORGE_OPENAI_API_KEY:-}
+      CAREERFORGE_ANTHROPIC_API_KEY: ${CAREERFORGE_ANTHROPIC_API_KEY:-}
+      CAREERFORGE_EMAIL_API_KEY: ${CAREERFORGE_EMAIL_API_KEY:-}
+    volumes:
+      - ./backend:/app/backend:ro
+    command: >
+      celery -A backend.tasks.worker worker
+        --loglevel=info
+        --concurrency=2
+    restart: unless-stopped
+
+  # ── Frontend (Next.js) ──────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: careerforge-frontend
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+      NEXT_PUBLIC_WS_URL: ws://localhost:8000
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: >
+      sh -c "npm run dev -- --host 0.0.0.0 --port 3000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
