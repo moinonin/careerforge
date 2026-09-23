@@ -137,7 +137,14 @@ export async function refreshTokens(): Promise<{
 }
 
 export async function logout(): Promise<void> {
-  await _request<void>("/auth/logout", undefined, "POST")
+  const token = getToken()
+  await fetch(`${API_BASE}/auth/logout`, {
+    method: "POST",
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    credentials: "include",
+  })
   setToken(null)
 }
 
