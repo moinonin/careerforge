@@ -23,6 +23,7 @@ from backend.auth.router import router as auth_router  # noqa: E402
 from backend.auth.router import users_router  # noqa: E402
 from backend.config import settings  # noqa: E402
 from backend.database import init_db, shutdown_db  # noqa: E402
+from backend.middleware.rate_limit import rate_limit_middleware  # noqa: E402
 from backend.profiles.router import router as profiles_router  # noqa: E402
 
 # ── Logging ────────────────────────────────────────────────────────────────
@@ -86,6 +87,9 @@ def create_app() -> FastAPI:
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type", "X-Request-Id"],
     )
+
+    # Rate limiting (skipped in development)
+    app.add_middleware(rate_limit_middleware)
 
     # Routers
     app.include_router(health.router, tags=["health"])
