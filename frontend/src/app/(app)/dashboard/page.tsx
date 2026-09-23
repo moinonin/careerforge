@@ -599,7 +599,7 @@ function OverviewTab({ user }: { user: any }) {
           <div className="dashboard-empty">Loading...</div>
         ) : libraryDocs.length === 0 ? (
           <div className="dashboard-empty-state">
-            <p>No documents yet. Start by generating your first CV.</p>
+            <p>No documents yet. Start by generating your first CV (a matching cover letter is included).</p>
           </div>
         ) : (
           <div className="dashboard-doc-list">
@@ -639,8 +639,12 @@ function OverviewTab({ user }: { user: any }) {
             <span className="dashboard-stat-value">{user.subscription?.credits_remaining ?? "—"}</span>
           </div>
           <div className="dashboard-stat">
-            <span className="dashboard-stat-label">Resumes generated</span>
-            <span className="dashboard-stat-value">{libraryDocs.length}</span>
+            <span className="dashboard-stat-label">CVs generated</span>
+            <span className="dashboard-stat-value">{libraryDocs.filter(d => d.artifact_type === "cv_docx").length}</span>
+          </div>
+          <div className="dashboard-stat">
+            <span className="dashboard-stat-label">Cover letters</span>
+            <span className="dashboard-stat-value">{libraryDocs.filter(d => d.artifact_type === "cl_docx").length}</span>
           </div>
         </div>
         {user.subscription?.status === "trialing" && (
@@ -679,7 +683,7 @@ function DashboardContent() {
   const router = useRouter()
   const { user, loading: authLoading } = useAuth()
   const [loading, setLoading] = useState(false)
-  const [activeTab, setActiveTab] = useState<"overview" | "resumes" | "settings">("overview")
+  const [activeTab, setActiveTab] = useState<"overview" | "resumes" | "cover-letters" | "settings">("overview")
 
   // Guard: if auth check fails, kick the user to login.
   useEffect(() => {
@@ -737,6 +741,19 @@ function DashboardContent() {
               <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
             Resumes
+          </button>
+          <button
+            className={`dashboard-nav-item ${activeTab === "cover-letters" ? "active" : ""}`}
+            onClick={() => setActiveTab("cover-letters")}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="dashboard-nav-icon">
+              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+              <line x1="16" y1="13" x2="8" y2="13" />
+              <line x1="16" y1="17" x2="8" y2="17" />
+              <polyline points="10 9 9 9 8 9" />
+            </svg>
+            Cover Letters
           </button>
           <button
             className={`dashboard-nav-item ${activeTab === "settings" ? "active" : ""}`}
@@ -825,6 +842,42 @@ function DashboardContent() {
                       <line x1="5" y1="12" x2="19" y2="12" />
                     </svg>
                     Create Resume
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === "cover-letters" && (
+          <div className="dashboard-content">
+            <div className="dashboard-card">
+              <div className="dashboard-card-header">
+                <h2 className="dashboard-card-title">Your Cover Letters</h2>
+                <a href="/profiles" className="dashboard-button dashboard-button-primary dashboard-button-sm">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="dashboard-button-icon">
+                    <line x1="12" y1="5" x2="12" y2="19" />
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                  New Cover Letter
+                </a>
+              </div>
+              <div className="dashboard-resume-grid">
+                <div className="dashboard-empty-state">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="dashboard-empty-icon">
+                    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="12" y1="18" x2="12" y2="12" />
+                    <line x1="9" y1="15" x2="15" y2="15" />
+                  </svg>
+                  <h3>No cover letters yet</h3>
+                  <p>Generate a CV to get a matching cover letter automatically.</p>
+                  <a href="/profiles" className="dashboard-button dashboard-button-primary" style={{marginTop: '1rem'}}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="dashboard-button-icon">
+                      <line x1="12" y1="5" x2="12" y2="19" />
+                      <line x1="5" y1="12" x2="19" y2="12" />
+                    </svg>
+                    Generate CV
                   </a>
                 </div>
               </div>
