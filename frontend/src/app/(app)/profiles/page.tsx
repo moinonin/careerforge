@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   listProfiles,
   createProfile,
@@ -329,6 +329,8 @@ export default function ProfilesPage() {
   const [saving, setSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
+  const searchParams = useSearchParams()
+  const imported = searchParams.get("imported") === "true"
 
   useEffect(() => {
     listProfiles()
@@ -336,6 +338,35 @@ export default function ProfilesPage() {
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
+
+  // Pre-fill form with imported CV data when arriving from upload page
+  useEffect(() => {
+    if (!imported) return
+    try {
+      const raw = sessionStorage.getItem("cv_import_data")
+      if (raw) {
+        const importedData = JSON.parse(raw)
+        // Merge imported data into form, leaving existing values as defaults
+        setForm(prev => {
+          const imported = importedData as Partial<FormState>
+          return {
+            ...prev,
+            ...imported,
+            contact: { ...prev.contact, ...(imported.contact || {}) },
+            education: imported.education || prev.education,
+            experience: imported.experience || prev.experience,
+            skills: imported.skills || prev.skills,
+            publications: imported.publications || prev.publications,
+            certifications: imported.certifications || prev.certifications,
+            languages: imported.languages || prev.languages,
+            projects: imported.projects || prev.projects,
+          }
+        })
+        // Clear sessionStorage so it doesn't re-apply on refresh
+        sessionStorage.removeItem("cv_import_data")
+      }
+    } catch { /* ignore parse errors */ }
+  }, [imported])
 
   const selectProfile = async (id: string) => {
     try {

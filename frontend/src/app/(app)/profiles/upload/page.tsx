@@ -328,7 +328,14 @@ export default function UploadPage() {
 
             <div className="flex flex-col sm:flex-row items-center gap-3 mt-4">
               <button
-                onClick={() => router.push("/profiles?imported=true")}
+                onClick={() => {
+                  if (profileData) {
+                    try {
+                      sessionStorage.setItem("cv_import_data", JSON.stringify(profileData))
+                    } catch { /* ignore storage errors */ }
+                  }
+                  router.push("/profiles?imported=true")
+                }}
                 className="w-full sm:w-auto px-5 py-2.5 rounded-lg bg-[rgba(0,0,0,0.08)] hover:bg-[rgba(0,0,0,0.12)] text-sm font-medium text-[var(--color-text)] transition-colors"
               >
                 Review in wizard

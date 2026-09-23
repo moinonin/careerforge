@@ -8,8 +8,12 @@ from backend.auth.schemas import CurrentUserId
 from backend.database import get_session
 from backend.profiles import schemas as profiles_schemas
 from backend.profiles import service as profiles_service
+from backend.profiles.cv_parser import parse_cv
 
 router = APIRouter(tags=["profiles"])
+
+# In-memory parse job store (dev). Production uses Celery + Redis.
+_parse_jobs: dict[str, dict] = {}
 
 
 # ── List profiles ─────────────────────────────────────────────────────────────
@@ -145,7 +149,21 @@ async def import_cv(
     """Trigger CV file import. Accepts a PDF or DOCX file as multipart upload."""
     import uuid
     parse_job_id = str(uuid.uuid4())
-    return {"parse_job_id": parse_job_id, "status": "queued"}
+    # Parse immediately using the CV parser
+    file_bytes = await file.read()
+    try:
+        parsed = parse_cv(file_bytes, file.filename or "")
+        _parse_jobs[parse_job_id] = {
+            "status": "completed",
+            "profile_data": parsed.model_dump(),
+            "confidence_flags": parsed.confidence_flags,
+        }
+    except Exception as e:
+        _parse_jobs[parse_job_id] = {
+            "status": "failed",
+            "message": f"Parse failed: {e}",
+        }
+    return {"parse_job_id": parse_job_id, "status": "completed"}
 
 
 @router.get("/import/{parse_job_id}", response_model=dict)
@@ -156,12 +174,13 @@ async def import_status(
 ) -> dict:
     """Poll the status of a CV parse job.
 
-    In production, this would check the Celery task state and return
-    the parsed profile_data with confidence flags when complete.
+    Returns the parsed profile_data with confidence flags when complete.
     """
-    # Placeholder: return not_found until the task is implemented
-    return {
-        "parse_job_id": parse_job_id,
-        "status": "not_found",
-        "message": "Parse job not found. The CV parser Celery task is not yet implemented.",
-    }
+    job = _parse_jobs.get(parse_job_id)
+    if not job:
+        return {
+            "parse_job_id": parse_job_id,
+            "status": "not_found",
+            "message": "Parse job not found. Upload a CV to start parsing.",
+        }
+    return job
