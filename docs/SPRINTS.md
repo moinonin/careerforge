@@ -437,7 +437,7 @@ The spec document is thorough on core architecture but misses several production
 
 ---
 
-### Sprint 4 — Document Engine: ATS-Compliant DOCX & PDF (Week 4–5)
+### Sprint 4 — Document Engine: ATS-Compliant DOCX & PDF (Week 4–5) ✅ COMPLETED
 
 **Goal:** Generated JSON is rendered to production-quality, ATS-compliant .docx and .pdf files that open cleanly in Word, Google Docs, and LibreOffice.
 
@@ -468,7 +468,7 @@ The spec document is thorough on core architecture but misses several production
 
 ---
 
-### Sprint 4.5 — Personal Document Library & Storage Quota (Week 5)
+### Sprint 4.5 — Personal Document Library & Storage Quota (Week 5) ✅ COMPLETED
 
 **Goal:** Every generated CV and cover letter is saved to the user's personal library with a per-user storage quota. Users can browse, download, delete, rename, and re-generate from prior jobs. The library is the primary value-retention feature of the SaaS — users come back to it.
 
@@ -519,7 +519,7 @@ The spec document is thorough on core architecture but misses several production
 
 ---
 
-### Sprint 5 — Stripe Billing: Subscriptions, Credits & Webhooks (Week 5–6)
+### Sprint 5 — Stripe Billing: Subscriptions, Credits & Webhooks (Week 5–6) ✅ COMPLETED
 
 **Goal:** Users can upgrade from trial to paid, purchase credit bundles, and the system correctly enforces billing state across all features.
 
@@ -547,7 +547,7 @@ The spec document is thorough on core architecture but misses several production
 
 ---
 
-### Sprint 6 — LLM Agnosticism: BYOK, Local LLM & WebSocket Streaming (Week 6–7)
+### Sprint 6 — LLM Agnosticism: BYOK, Local LLM & WebSocket Streaming (Week 6–7) 🚧 IN PROGRESS
 
 **Goal:** Users are not locked into the platform's LLM. They can bring their own API key or connect to a local Ollama/vLLM instance. Real-time token streaming for a premium UX.
 
