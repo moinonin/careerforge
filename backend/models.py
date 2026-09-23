@@ -45,6 +45,7 @@ class User(Base):
     usage_logs = relationship("OrganizationUsageLog", back_populates="user", cascade="all, delete-orphan", foreign_keys="OrganizationUsageLog.user_id")
     invitations = relationship("OrganizationInvitation", back_populates="invited_by_user", cascade="all, delete-orphan", foreign_keys="OrganizationInvitation.invited_by")
     refresh_tokens = relationship("RefreshToken", back_populates="user", cascade="all, delete-orphan")
+    metrics = relationship("GenerationMetric", back_populates="user", foreign_keys="GenerationMetric.user_id", cascade="all, delete-orphan")
 
 
 # ---------------------------------------------------------------------------
@@ -152,6 +153,7 @@ class GenerationJob(Base):
 
     user = relationship("User", back_populates="generation_jobs")
     profile = relationship("MasterProfile", back_populates="generation_jobs")
+    metric = relationship("GenerationMetric", back_populates="generation_job", cascade="all, delete-orphan")
 
 
 # ---------------------------------------------------------------------------
@@ -310,6 +312,7 @@ class Organization(Base):
     master_profiles = relationship("OrganizationMasterProfile", back_populates="organization", cascade="all, delete-orphan")
     usage_logs = relationship("OrganizationUsageLog", back_populates="organization", cascade="all, delete-orphan")
     invitations = relationship("OrganizationInvitation", back_populates="organization", cascade="all, delete-orphan")
+    metrics = relationship("GenerationMetric", back_populates="organization", cascade="all, delete-orphan")
 
 
 # ---------------------------------------------------------------------------
@@ -439,3 +442,29 @@ MasterProfile.generation_jobs = relationship(
 GenerationJob.stored_artifacts = relationship(
     "StoredArtifact", back_populates="generation_job", cascade="all, delete-orphan"
 )
+
+
+# ---------------------------------------------------------------------------
+# Generation Metrics (Sprint 10 — feature usage tracking)
+# ---------------------------------------------------------------------------
+
+class GenerationMetric(Base):
+    __tablename__ = "generation_metrics"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default="gen_random_uuid()")
+    generation_job_id: Mapped[str] = mapped_column(String(36), ForeignKey("generation_jobs.id", ondelete="CASCADE"), nullable=False, index=True)
+    organization_id: Mapped[str] = mapped_column(String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    provider: Mapped[str] = mapped_column(String(50), nullable=False)  # openai | anthropic | ollama | custom
+    model_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    output_language: Mapped[str] = mapped_column(String(10), default="en", nullable=False)
+    export_format: Mapped[str] = mapped_column(String(10), nullable=False)  # docx | pdf | both
+    at_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    tokens_used: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+
+    generation_job = relationship("GenerationJob", back_populates="metric")
+    organization = relationship("Organization", back_populates="metrics")
+    user = relationship("User", back_populates="metrics", foreign_keys="GenerationMetric.user_id")

@@ -35,7 +35,7 @@ from backend.llm.service import (
     render_cv_markdown,
     run_generation,
 )
-from backend.models import GenerationJob, MasterProfile, StoredArtifact
+from backend.models import GenerationJob, MasterProfile, StoredArtifact, GenerationMetric
 from backend.validators.sanitization import sanitize_text  # noqa: E402
 import structlog  # noqa: E402
 
@@ -89,6 +89,33 @@ LANGUAGE_LABELS: dict[str, str] = {
     "fr": "French",
     "fi": "Finnish",
 }
+
+
+async def track_usage(
+    session: AsyncSession,
+    organization_id: str,
+    user_id: str | None,
+    generation_job_id: str,
+    provider: str,
+    model_name: str,
+    output_language: str,
+    export_format: str,
+    at_score: int | None,
+    tokens_used: int | None,
+) -> None:
+    """Persist a GenerationMetric record for feature usage tracking."""
+    metric = GenerationMetric(
+        generation_job_id=generation_job_id,
+        organization_id=organization_id,
+        user_id=user_id,
+        provider=provider,
+        model_name=model_name,
+        output_language=output_language,
+        export_format=export_format,
+        at_score=at_score,
+        tokens_used=tokens_used,
+    )
+    session.add(metric)
 
 
 @router.post("", status_code=status.HTTP_202_ACCEPTED)
@@ -214,6 +241,25 @@ async def start_generation(
             cv_pdf_path=cv_pdf_path,
             cl_pdf_path=cl_pdf_path,
             user_id=current_user_id,
+        )
+
+        # Track usage for Sprint 10 feature analytics
+        from backend.models import User
+        stmt = select(User).where(User.id == current_user_id)
+        result = await session.execute(stmt)
+        user = result.scalar_one_or_none()
+        org_id = user.organization_id if user else None
+        await track_usage(
+            session,
+            organization_id=org_id or "",
+            user_id=current_user_id,
+            generation_job_id=job.id,
+            provider=provider or "system_default",
+            model_name=model or "unknown",
+            output_language=output_language,
+            export_format="both",
+            at_score=at_score,
+            tokens_used=job.tokens_used,
         )
 
         return {
