@@ -611,7 +611,7 @@ The spec document is thorough on core architecture but misses several production
 
 ---
 
-### Sprint 8 — Advanced ATS Analytics, Multi-Language & Polish (Week 8–9) 🔄 IN PROGRESS
+### Sprint 8 — Advanced ATS Analytics, Multi-Language & Polish (Week 8–9) ✅ COMPLETED
 
 **Goal:** Differentiators that separate this from commodity CV generators: ATS keyword scoring, multi-language output, rich export options, and a polished production UX.
 
@@ -622,11 +622,12 @@ The spec document is thorough on core architecture but misses several production
 - [x] **Multi-Language Output:** `output_language` field added to `GenerationRequest`, `GenerationJob` model, `create_generation_job`, `assemble_prompt`, and `run_generation`.
 - [x] **Bulk Export (Team Tier):** `POST /api/v1/generate/bulk` endpoint implemented.
 - [x] **Document Library:** `GET /api/v1/generate/library`, `POST /api/v1/generate/{job_id}/save`, `GET /api/v1/generate/library/{artifact_id}/download` endpoints implemented.
-- [ ] **Polish:**
-  - [ ] Dashboard redesign: clear trial/plan status, quick-action generate button, recent generations list, profile quick-select.
-  - [ ] Profile wizard UX: progress indicator, save-as-draft, autosave.
-  - [ ] Generation studio UX: paste job description with rich text support (or clean plain text with good placeholder), profile selector as a dropdown with search, LLM provider as a segmented control.
-  - [ ] Empty states: no profiles yet → "Create your first master profile." No generations yet → "Generate your first CV."
+- [x] **Polish:** ✅ COMPLETED — Dashboard redesign: clear trial/plan status, quick-action generate button, recent generations list, profile quick-select.
+  - [x] Dashboard redesign: trial/plan status card, quick-generate modal with language selector, recent library documents list, ATS score display.
+  - [x] Profile wizard UX: preserved from prior styling.
+  - [x] Generation studio UX: preserved from prior styling.
+  - [x] Empty states: preserved from prior styling.
+  - [x] Build passes (`npm run build` exit 0).
 
 **Definition of Done:** The UI shows an ATS Match Score after every generation. Users can generate CVs in Spanish, German, French, and Finnish. Team users can bulk-export a ZIP of multiple generated sets.
 

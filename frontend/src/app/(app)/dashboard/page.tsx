@@ -12,6 +12,10 @@ const LLM_PROVIDERS = [
   { id: "custom", name: "Custom OpenAI-Compatible", models: [], requiresKey: true },
 ] as const
 
+const LANGUAGE_LABELS: Record<string, string> = {
+  en: "English", es: "Spanish", de: "German", fr: "French", fi: "Finnish",
+}
+
 type LLMConfig = {
   id: string
   provider: string
@@ -90,6 +94,44 @@ async function testLLMConfig(configId: string): Promise<{ success: boolean; mess
     method: "POST",
     headers,
   })
+}
+
+// ── Library API ────────────────────────────────────────────────────────
+
+type LibraryDocument = {
+  id: string
+  title: string
+  job_title: string | null
+  company_name: string | null
+  artifact_type: string
+  file_url: string
+  at_score: number | null
+  is_temp: boolean
+  created_at: string | null
+}
+
+async function listLibrary(): Promise<{ documents: LibraryDocument[]; total: number }> {
+  const headers = await getAuthHeaders()
+  return apiRequest<{ documents: LibraryDocument[]; total: number }>("/generate/library", { headers })
+}
+
+async function startGeneration(data: {
+  job_description: string
+  job_title?: string
+  company_name?: string
+  output_language?: string
+}): Promise<{ job_id: string; status: string }> {
+  const headers = await getAuthHeaders()
+  return apiRequest<{ job_id: string; status: string }>("/generate", {
+    method: "POST",
+    headers,
+    body: JSON.stringify(data),
+  })
+}
+
+async function fetchJobStatus(jobId: string): Promise<any> {
+  const headers = await getAuthHeaders()
+  return apiRequest(`/generate/jobs/${jobId}`, { headers })
 }
 
 function SettingsTab() {
@@ -422,6 +464,216 @@ function SettingsTab() {
   )
 }
 
+function OverviewTab({ user }: { user: any }) {
+  const [libraryDocs, setLibraryDocs] = useState<LibraryDocument[]>([])
+  const [libraryLoading, setLibraryLoading] = useState(false)
+  const [showGenerate, setShowGenerate] = useState(false)
+  const [jobDesc, setJobDesc] = useState("")
+  const [jobTitle, setJobTitle] = useState("")
+  const [companyName, setCompanyName] = useState("")
+  const [outputLang, setOutputLang] = useState("en")
+  const [generating, setGenerating] = useState(false)
+  const [generationResult, setGenerationResult] = useState<{
+    at_score: number | null
+    missing_keywords: string[] | null
+  } | null>(null)
+
+  useEffect(() => {
+    async function load() {
+      try {
+        setLibraryLoading(true)
+        const data = await listLibrary()
+        setLibraryDocs(data.documents.slice(0, 5))
+      } catch { /* ignore */ } finally {
+        setLibraryLoading(false)
+      }
+    }
+    load()
+  }, [])
+
+  async function handleGenerate() {
+    if (!jobDesc.trim()) return
+    setGenerating(true)
+    setGenerationResult(null)
+    try {
+      const result = await startGeneration({
+        job_description: jobDesc,
+        job_title: jobTitle || undefined,
+        company_name: companyName || undefined,
+        output_language: outputLang,
+      })
+      const job = await fetchJobStatus(result.job_id)
+      setGenerationResult({
+        at_score: job.at_score,
+        missing_keywords: job.missing_keywords,
+      })
+      setJobDesc("")
+      setJobTitle("")
+      setCompanyName("")
+    } catch { /* ignore */ } finally {
+      setGenerating(false)
+    }
+  }
+
+  return (
+    <div className="dashboard-content">
+      {/* Quick generate card */}
+      <div className="dashboard-card dashboard-card-featured">
+        <div className="dashboard-card-header">
+          <h2 className="dashboard-card-title">Generate CV</h2>
+        </div>
+        {showGenerate ? (
+          <div className="dashboard-generate-form">
+            <div className="dashboard-form-group">
+              <label htmlFor="gen-job-desc" className="dashboard-form-label">Job Description</label>
+              <textarea
+                id="gen-job-desc"
+                className="dashboard-form-textarea"
+                value={jobDesc}
+                onChange={e => setJobDesc(e.target.value)}
+                placeholder="Paste the job description here..."
+                rows={4}
+              />
+            </div>
+            <div className="dashboard-form-row">
+              <div className="dashboard-form-group">
+                <label htmlFor="gen-job-title" className="dashboard-form-label">Job Title</label>
+                <input id="gen-job-title" type="text" className="dashboard-form-input"
+                  value={jobTitle} onChange={e => setJobTitle(e.target.value)} placeholder="e.g. Senior Engineer" />
+              </div>
+              <div className="dashboard-form-group">
+                <label htmlFor="gen-company" className="dashboard-form-label">Company</label>
+                <input id="gen-company" type="text" className="dashboard-form-input"
+                  value={companyName} onChange={e => setCompanyName(e.target.value)} placeholder="e.g. Acme Corp" />
+              </div>
+              <div className="dashboard-form-group">
+                <label htmlFor="gen-lang" className="dashboard-form-label">Output Language</label>
+                <select id="gen-lang" className="dashboard-form-select"
+                  value={outputLang} onChange={e => setOutputLang(e.target.value)}>
+                  {Object.entries(LANGUAGE_LABELS).map(([code, label]) => (
+                    <option key={code} value={code}>{label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="dashboard-form-actions">
+              <button className="dashboard-button dashboard-button-secondary"
+                onClick={() => setShowGenerate(false)}>Cancel</button>
+              <button className="dashboard-button dashboard-button-primary"
+                onClick={handleGenerate} disabled={generating || !jobDesc.trim()}>
+                {generating ? "Generating..." : "Generate CV"}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="dashboard-quick-generate">
+            <p className="dashboard-quick-text">Paste a job description and generate a tailored CV in seconds.</p>
+            <button className="dashboard-button dashboard-button-primary" onClick={() => setShowGenerate(true)}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="dashboard-button-icon">
+                <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              New Generation
+            </button>
+          </div>
+        )}
+        {generationResult && (
+          <div className="dashboard-at-score">
+            <span className="dashboard-at-score-value">ATS Match: {generationResult.at_score ?? "—"}/100</span>
+            {generationResult.missing_keywords && generationResult.missing_keywords.length > 0 && (
+              <span className="dashboard-at-score-missing">
+                {generationResult.missing_keywords.length} keywords missing: {generationResult.missing_keywords.join(", ")}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Recent documents */}
+      <div className="dashboard-card">
+        <div className="dashboard-card-header">
+          <h2 className="dashboard-card-title">Recent Documents</h2>
+          <a href="/profiles" className="dashboard-button dashboard-button-sm dashboard-button-secondary">View All</a>
+        </div>
+        {libraryLoading ? (
+          <div className="dashboard-empty">Loading...</div>
+        ) : libraryDocs.length === 0 ? (
+          <div className="dashboard-empty-state">
+            <p>No documents yet. Start by generating your first CV.</p>
+          </div>
+        ) : (
+          <div className="dashboard-doc-list">
+            {libraryDocs.map(doc => (
+              <div key={doc.id} className="dashboard-doc-item">
+                <div className="dashboard-doc-info">
+                  <span className="dashboard-doc-title">{doc.title}</span>
+                  <span className="dashboard-doc-meta">
+                    {doc.job_title && `${doc.job_title}`}
+                    {doc.company_name && ` · ${doc.company_name}`}
+                    {doc.at_score !== null && ` · ATS: ${doc.at_score}/100`}
+                  </span>
+                </div>
+                <a href={doc.file_url} download className="dashboard-button dashboard-button-sm dashboard-button-secondary">Download</a>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Trial / subscription card */}
+      <div className="dashboard-card dashboard-card-featured">
+        <div className="dashboard-card-header">
+          <h2 className="dashboard-card-title">Your account</h2>
+        </div>
+        <div className="dashboard-stats">
+          <div className="dashboard-stat">
+            <span className="dashboard-stat-label">Plan</span>
+            <span className="dashboard-stat-value">
+              {user.subscription?.status === "active"
+                ? user.subscription.plan_tier === "free" ? "Free" : `Pro (${user.subscription.plan_tier})`
+                : user.subscription?.status === "trialing" ? "Trial" : "Free"}
+            </span>
+          </div>
+          <div className="dashboard-stat">
+            <span className="dashboard-stat-label">Credits remaining</span>
+            <span className="dashboard-stat-value">{user.subscription?.credits_remaining ?? "—"}</span>
+          </div>
+          <div className="dashboard-stat">
+            <span className="dashboard-stat-label">Resumes generated</span>
+            <span className="dashboard-stat-value">{libraryDocs.length}</span>
+          </div>
+        </div>
+        {user.subscription?.status === "trialing" && (
+          <div className="dashboard-trial-banner">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="dashboard-trial-icon">
+              <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+            </svg>
+            <div>
+              <p className="dashboard-trial-title">
+                {user.subscription?.trial_ends_at
+                  ? `Your 14-day trial ends ${new Date(user.subscription.trial_ends_at).toLocaleDateString()}`
+                  : "Your trial is active"}
+              </p>
+              <p className="dashboard-trial-text">{user.subscription?.credits_remaining ?? 5} generations remaining. Upgrade to Pro for unlimited access.</p>
+            </div>
+          </div>
+        )}
+        {user.subscription?.status === "active" && user.subscription.plan_tier === "free" && (
+          <div className="dashboard-upgrade-banner">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="dashboard-upgrade-icon">
+              <path d="M12 9v6m3-3H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div>
+              <p className="dashboard-upgrade-title">Upgrade to Pro</p>
+              <p className="dashboard-upgrade-text">Unlock all templates, faster processing, and custom branding for $29/month.</p>
+              <a href="/pricing" className="dashboard-upgrade-button">View plans</a>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function DashboardContent() {
   const router = useRouter()
   const { user, loading: authLoading } = useAuth()
@@ -540,123 +792,7 @@ function DashboardContent() {
         </header>
 
         {activeTab === "overview" && (
-          <div className="dashboard-content">
-            {/* Trial / subscription card */}
-            <div className="dashboard-card dashboard-card-featured">
-              <div className="dashboard-card-header">
-                <h2 className="dashboard-card-title">Your account</h2>
-              </div>
-              <div className="dashboard-stats">
-                <div className="dashboard-stat">
-                  <span className="dashboard-stat-label">Plan</span>
-                  <span className="dashboard-stat-value">
-                    {user.subscription?.status === "active"
-                      ? user.subscription.plan_tier === "free"
-                        ? "Free"
-                        : `Pro (${user.subscription.plan_tier})`
-                      : user.subscription?.status === "trialing"
-                      ? "Trial"
-                      : "Free"}
-                  </span>
-                </div>
-                <div className="dashboard-stat">
-                  <span className="dashboard-stat-label">Credits remaining</span>
-                  <span className="dashboard-stat-value">
-                    {user.subscription?.credits_remaining ?? "—"}
-                  </span>
-                </div>
-                <div className="dashboard-stat">
-                  <span className="dashboard-stat-label">Resumes generated</span>
-                  <span className="dashboard-stat-value">0</span>
-                </div>
-              </div>
-              {user.subscription?.status === "trialing" && (
-                <div className="dashboard-trial-banner">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="dashboard-trial-icon">
-                    <circle cx="12" cy="12" r="10" />
-                    <polyline points="12 6 12 12 16 14" />
-                  </svg>
-                  <div>
-                    <p className="dashboard-trial-title">
-                      {user.subscription?.trial_ends_at
-                        ? `Your 14-day trial ends ${new Date(user.subscription.trial_ends_at).toLocaleDateString()}`
-                        : "Your trial is active"}
-                    </p>
-                    <p className="dashboard-trial-text">
-                      {user.subscription?.credits_remaining ?? 5} generations
-                      remaining. Upgrade to Pro for unlimited access.
-                    </p>
-                  </div>
-                </div>
-              )}
-              {user.subscription?.status === "active" &&
-                user.subscription.plan_tier === "free" && (
-                  <div className="dashboard-upgrade-banner">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="dashboard-upgrade-icon">
-                      <path d="M12 9v6m3-3H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <div>
-                      <p className="dashboard-upgrade-title">Upgrade to Pro</p>
-                      <p className="dashboard-upgrade-text">
-                        Unlock all templates, faster processing, and custom branding
-                        for $29/month.
-                      </p>
-                      <a href="/pricing" className="dashboard-upgrade-button">
-                        View plans
-                      </a>
-                    </div>
-                  </div>
-                )}
-            </div>
-
-            {/* Quick actions */}
-            <div className="dashboard-card">
-              <div className="dashboard-card-header">
-                <h2 className="dashboard-card-title">Quick actions</h2>
-              </div>
-              <div className="dashboard-actions">
-                <a
-                  href="/profiles"
-                  className="dashboard-action-button"
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="dashboard-action-icon">
-                    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
-                    <polyline points="14 2 14 8 20 8" />
-                    <line x1="12" y1="18" x2="12" y2="12" />
-                    <line x1="9" y1="15" x2="15" y2="15" />
-                  </svg>
-                  New resume
-                </a>
-                <button className="dashboard-action-button">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="dashboard-action-icon">
-                    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
-                    <polyline points="14 2 14 8 20 8" />
-                    <line x1="16" y1="13" x2="8" y2="13" />
-                    <line x1="16" y1="17" x2="8" y2="17" />
-                    <polyline points="10 9 9 11 12 13" />
-                  </svg>
-                  New cover letter
-                </button>
-                <a
-                  href="/profiles"
-                  className="dashboard-action-button"
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="dashboard-action-icon">
-                    <path d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  My resume drafts
-                </a>
-              </div>
-            </div>
-
-            {/* Recent activity placeholder */}
-            <div className="dashboard-card">
-              <div className="dashboard-card-header">
-                <h2 className="dashboard-card-title">Recent activity</h2>
-              </div>
-              <p className="dashboard-empty">No activity yet. Start by creating your first resume.</p>
-            </div>
-          </div>
+          <OverviewTab user={user} />
         )}
 
         {activeTab === "resumes" && (
@@ -673,7 +809,6 @@ function DashboardContent() {
                 </a>
               </div>
               <div className="dashboard-resume-grid">
-                {/* Resume cards will go here */}
                 <div className="dashboard-empty-state">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="dashboard-empty-icon">
                     <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
