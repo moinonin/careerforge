@@ -37,7 +37,13 @@ class User(Base):
     notifications = relationship("Notification", back_populates="recipient", cascade="all, delete-orphan")
     audit_logs = relationship("AuditLog", back_populates="actor", cascade="all, delete-orphan")
     organizations = relationship("Organization", back_populates="owner", cascade="all, delete-orphan")
-    org_memberships = relationship("OrganizationMember", back_populates="user", cascade="all, delete-orphan")
+    org_memberships = relationship(
+        "OrganizationMember", back_populates="user", cascade="all, delete-orphan",
+        foreign_keys="OrganizationMember.user_id",
+    )
+    master_profiles = relationship("OrganizationMasterProfile", back_populates="created_by_user", cascade="all, delete-orphan", foreign_keys="OrganizationMasterProfile.created_by")
+    usage_logs = relationship("OrganizationUsageLog", back_populates="user", cascade="all, delete-orphan", foreign_keys="OrganizationUsageLog.user_id")
+    invitations = relationship("OrganizationInvitation", back_populates="invited_by_user", cascade="all, delete-orphan", foreign_keys="OrganizationInvitation.invited_by")
     refresh_tokens = relationship("RefreshToken", back_populates="user", cascade="all, delete-orphan")
 
 
@@ -284,13 +290,22 @@ class Organization(Base):
     owner_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     max_seats: Mapped[int] = mapped_column(Integer, default=5, nullable=False)
     used_storage_bytes: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    seat_price_cents: Mapped[int] = mapped_column(Integer, default=1200, nullable=False)  # $12/seat/month
+    team_quota: Mapped[int] = mapped_column(Integer, default=250, nullable=False)
+    team_quota_used: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    quota_period_start: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )
 
     owner = relationship("User", back_populates="organizations")
     subscriptions = relationship("Subscription", back_populates="organization", cascade="all, delete-orphan")
-    members = relationship("OrganizationMember", back_populates="organization", cascade="all, delete-orphan")
+    members = relationship("OrganizationMember", back_populates="organization", cascade="all, delete-orphan", foreign_keys="OrganizationMember.organization_id")
+    master_profiles = relationship("OrganizationMasterProfile", back_populates="organization", cascade="all, delete-orphan")
+    usage_logs = relationship("OrganizationUsageLog", back_populates="organization", cascade="all, delete-orphan")
+    invitations = relationship("OrganizationInvitation", back_populates="organization", cascade="all, delete-orphan")
 
 
 # ---------------------------------------------------------------------------
@@ -304,13 +319,89 @@ class OrganizationMember(Base):
     organization_id: Mapped[str] = mapped_column(String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False)
     user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     role: Mapped[str] = mapped_column(String(50), default="member", nullable=False)  # admin | member
+    invited_by: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    joined_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
 
     organization = relationship("Organization", back_populates="members")
-    user = relationship("User", back_populates="org_memberships")
+    user = relationship("User", back_populates="org_memberships", foreign_keys="OrganizationMember.user_id")
 
     __table_args__ = (
         # unique(organization_id, user_id) enforced in migration
     )
+
+
+# ---------------------------------------------------------------------------
+# Organization Master Profiles (shared profile templates — Sprint 7+)
+# ---------------------------------------------------------------------------
+
+class OrganizationMasterProfile(Base):
+    __tablename__ = "organization_master_profiles"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default="gen_random_uuid()")
+    organization_id: Mapped[str] = mapped_column(String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    profile_data: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    created_by: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    is_shared: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False,
+        onupdate=lambda: datetime.now(UTC)
+    )
+
+    organization = relationship("Organization", back_populates="master_profiles")
+    created_by_user = relationship("User", back_populates="master_profiles", foreign_keys="OrganizationMasterProfile.created_by")
+
+
+# ---------------------------------------------------------------------------
+# Organization Usage Log (team quota tracking — Sprint 7+)
+# ---------------------------------------------------------------------------
+
+class OrganizationUsageLog(Base):
+    __tablename__ = "organization_usage_log"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default="gen_random_uuid()")
+    organization_id: Mapped[str] = mapped_column(String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False)
+    user_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    generation_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    period_key: Mapped[str] = mapped_column(String(20), nullable=False)  # YYYY-MM
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False,
+        onupdate=lambda: datetime.now(UTC)
+    )
+
+    organization = relationship("Organization", back_populates="usage_logs")
+    user = relationship("User", back_populates="usage_logs", foreign_keys="OrganizationUsageLog.user_id")
+
+
+# ---------------------------------------------------------------------------
+# Organization Invitations (team onboarding — Sprint 7+)
+# ---------------------------------------------------------------------------
+
+class OrganizationInvitation(Base):
+    __tablename__ = "organization_invitations"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default="gen_random_uuid()")
+    organization_id: Mapped[str] = mapped_column(String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False)
+    email: Mapped[str] = mapped_column(String(255), nullable=False)
+    role: Mapped[str] = mapped_column(String(50), default="member", nullable=False)
+    token: Mapped[str] = mapped_column(String(255), nullable=False)
+    invited_by: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False)  # pending | accepted | expired | cancelled
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+
+    organization = relationship("Organization", back_populates="invitations")
+    invited_by_user = relationship("User", back_populates="invitations", foreign_keys="OrganizationInvitation.invited_by")
 
 
 # ---------------------------------------------------------------------------

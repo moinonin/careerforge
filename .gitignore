@@ -68,3 +68,4 @@ yarn.lock
 # IDE
 .vscode/
 .idea/
+careerforge.db

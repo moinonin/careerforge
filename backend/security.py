@@ -61,4 +61,9 @@ def generate_master_key_hex() -> str:
     return os.urandom(32).hex()
 
 
-__all__ = ["encrypt_api_key", "decrypt_api_key", "generate_master_key_hex"]
+__all__ = ["encrypt_api_key", "decrypt_api_key", "generate_master_key_hex", "generate_token_hash"]
+
+
+def generate_token_hash(length: int = 32) -> str:
+    """Generate a cryptographically secure random token hash."""
+    return os.urandom(length).hex()
