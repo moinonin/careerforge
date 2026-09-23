@@ -77,7 +77,13 @@ class Settings(BaseSettings):
     rate_limit_trial_generations_per_minute: int = 1
     rate_limit_paid_generations_per_minute: int = 60
 
-    # ── Generated docs ───────────────────────────────────────────────────────
+    # ── Sentry ──────────────────────────────────────────────────────────
+    sentry_dsn: str | None = None  # e.g. https://examplePublicKey@o0.ingest.sentry.io/0
+    sentry_environment: str = "development"
+    sentry_traces_sample_rate: float = 0.1
+    sentry_profiles_sample_rate: float = 0.1
+
+    # ── Generated docs ───────────────────────────────────────────────────
     default_docx_page_size: str = "letter"  # letter | a4
     default_docx_font: str = "Calibri"
     default_docx_font_size: int = 11

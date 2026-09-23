@@ -57,6 +57,11 @@ def _configure_logging() -> None:
 _configure_logging()
 log = structlog.get_logger()
 
+# Initialize Sentry if DSN is configured
+from backend.monitoring.sentry_init import initialize_sentry
+
+initialize_sentry()
+
 # ── Lifespan ────────────────────────────────────────────────────────────────
 
 @asynccontextmanager
