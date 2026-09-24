@@ -819,9 +819,13 @@ async def download_artifact(
     if artifact is None:
         raise HTTPException(status_code=404, detail="Artifact not found")
 
-    # For file-based artifacts, redirect to file_url
-    # For now, return the artifact metadata
-    return Response(
-        content=artifact.file_url,
-        media_type="text/plain",
-    )
+    # Return the file as binary content
+    file_path = artifact.file_url
+    if not file_path or not os.path.isfile(file_path):
+        raise HTTPException(status_code=404, detail="File not found on disk")
+    with open(file_path, "rb") as f:
+        file_bytes = f.read()
+    # Determine media type from file extension
+    ext = os.path.splitext(file_path)[1].lower()
+    media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document" if ext == ".docx" else "application/pdf" if ext == ".pdf" else "application/octet-stream"
+    return Response(content=file_bytes, media_type=media_type)
