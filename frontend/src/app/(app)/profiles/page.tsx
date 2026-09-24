@@ -347,21 +347,35 @@ export default function ProfilesPage() {
       const raw = sessionStorage.getItem("cv_import_data")
       if (raw) {
         const importedData = JSON.parse(raw)
-        // Merge imported data into form, leaving existing values as defaults
+        const skillsStr = (arr: string[]) => (arr && arr.length ? arr.join(", ") : "")
         setForm(prev => {
           const imported = importedData as Partial<FormState>
+          const skillsFromImport = imported.skills
+            ? {
+                technical: skillsStr(imported.skills.technical as any),
+                domain: skillsStr(imported.skills.domain as any),
+                tools: skillsStr(imported.skills.tools as any),
+                soft: skillsStr(imported.skills.soft as any),
+              }
+            : null
           return {
             ...prev,
             ...imported,
             contact: { ...prev.contact, ...(imported.contact || {}) },
-            education: imported.education || prev.education,
-            experience: imported.experience || prev.experience,
-            skills: imported.skills || prev.skills,
+            education: (imported.education || []).map((e: any) => ({
+              ...(e as EducationForm),
+              details: typeof e.details === "string" ? e.details : "",
+            })),
+            experience: (imported.experience || []).map((e: any) => ({
+              ...(e as ExperienceForm),
+              bullets: typeof e.bullets === "string" ? e.bullets : "",
+            })),
+            skills: skillsFromImport || prev.skills,
             publications: imported.publications || prev.publications,
             certifications: imported.certifications || prev.certifications,
             languages: imported.languages || prev.languages,
             projects: imported.projects || prev.projects,
-          }
+          } as FormState
         })
         // Create a profile from imported data so the user can edit and save
         createProfile("Imported CV", importedData)
