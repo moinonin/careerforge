@@ -20,13 +20,22 @@ async def mock_get_session():
 
 @pytest.fixture(autouse=True)
 def _mock_db():
-    """Patch get_session for all tests in this module."""
-    with patch("backend.database.get_session", side_effect=mock_get_session()):
+    with patch("backend.database.get_session", side_effect=mock_get_session):
         yield
 
 
 @pytest.fixture
-def client():
+def client(_mock_db):
+    """Create TestClient with mocked DB session.
+
+    Reloads backend.main and admin module so Depends captures the mock.
+    """
+    import importlib
+    import backend.database
+    import backend.api.routes.admin
+    import backend.main
+    importlib.reload(backend.api.routes.admin)
+    importlib.reload(backend.main)
     from backend.main import app
     from fastapi.testclient import TestClient
     return TestClient(app)
