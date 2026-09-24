@@ -56,6 +56,11 @@ async function _request<T>(
   }
 
   const res = await fetch(`${API_BASE}${path}`, opts)
+
+  if (res.status === 204) {
+    return undefined as T
+  }
+
   const data = (await res.json()) as {
     success?: boolean
     error?: string
