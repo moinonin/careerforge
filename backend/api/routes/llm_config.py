@@ -1,13 +1,13 @@
 """LLM Config API — Sprint 6: BYOK + Local LLM management.
 
 Endpoints:
-  GET    /api/v1/llm-config              — list user's LLM configurations
+  GET /api/v1/llm-config              — list user's LLM configurations
   POST   /api/v1/llm-config              — create new config
   GET    /api/v1/llm-config/{config_id}  — get single config (decrypted key not returned)
   PUT    /api/v1/llm-config/{config_id}  — update config
   DELETE /api/v1/llm-config/{config_id}  — delete config
   POST   /api/v1/llm-config/{config_id}/test — test connectivity
-  GET    /api/v1/llm/models              — list available Ollama models
+  GET    /api/v1/llm-config/models       — list available Ollama models
 """
 
 from __future__ import annotations
