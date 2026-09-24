@@ -702,7 +702,7 @@ function OverviewTab({ user }: { user: any }) {
                   ? `Your 14-day trial ends ${new Date(user.subscription.trial_ends_at).toLocaleDateString()}`
                   : "Your trial is active"}
               </p>
-              <p className="dashboard-trial-text">{user.subscription?.credits_remaining ?? 5} generations remaining. Upgrade to Pro for unlimited access.</p>
+              <p className="dashboard-trial-text">{user.subscription?.credits_remaining ?? 2} generations remaining this month. Upgrade to Individual ($9.99/mo) for 20 generations/month.</p>
             </div>
           </div>
         )}
@@ -713,7 +713,7 @@ function OverviewTab({ user }: { user: any }) {
             </svg>
             <div>
               <p className="dashboard-upgrade-title">Upgrade to Pro</p>
-              <p className="dashboard-upgrade-text">Unlock all templates, faster processing, and custom branding for $29/month.</p>
+              <p className="dashboard-upgrade-text">Unlock all templates, faster processing, and custom branding for $9.99/month.</p>
               <a href="/pricing" className="dashboard-upgrade-button">View plans</a>
             </div>
           </div>

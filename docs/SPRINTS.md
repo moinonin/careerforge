@@ -295,7 +295,7 @@ The spec document is thorough on core architecture but misses several production
 
 | Area | What's Missing | What to Add |
 |---|---|---|
-| **Credit/Pay-Per-Set Implementation** | Spec describes the tier but not the mechanics | Pay-per-set: user purchases a bundle of credits (e.g., 3 credits for $11.97 = $3.99/set). Each successful generation consumes 1 credit. Credits expire after 12 months. Implement as Stripe Products with recurring vs. one-time payment types. Metered billing for overages on team plans. |
+|| **Credit/Pay-Per-Set Implementation** | Spec describes the tier but not the mechanics | Pay-per-set: user purchases a bundle of credits (e.g., 4 credits for $1.99). Each successful generation consumes 1 credit. Credits expire after 12 months. Implement as Stripe Products with recurring (subscription) vs. one-time (credit bundle) payment types. Metered billing for overages on team plans. |
 | **Invoice & Receipt Generation** | Not mentioned | Generate PDF invoices for subscription renewals and credit purchases. Store in S3, make downloadable from the billing dashboard. Required for business users expensing their subscription. |
 | **Dunning Management** | Not mentioned | Handle failed payments gracefully: retry schedule (day 1, day 3, day 7), account downgrade to read-only on final failure, email notifications at each stage. |
 | **Tax Handling** | Not mentioned | For SaaS with international users, integrate Stripe Tax or similar to handle VAT/sales tax based on user location. Display tax-inclusive pricing where required by law. |
@@ -369,7 +369,7 @@ The spec document is thorough on core architecture but misses several production
 - ✅ `GET /api/v1/users/me` + `PUT /api/v1/users/me` — profile read/update (name, email, password)
 - ✅ Frontend: signup, login, forgot-password, reset-password pages with auth context + HTTP-only token storage
 - ✅ Password validation: minimum 8 chars on signup and reset
-- ✅ Trial initialization: `trial_ends_at = now + 14 days`, `credits_remaining = 5`, `status = trialing`
+- ✅ Trial initialization: `trial_ends_at = now + 14 days`, `credits_remaining = 2`, `status = trialing`
 - ⚠️ Email delivery: signup welcome, password reset emails not yet wired to a provider (dev mode ignores)
 - ⚠️ Rate limiting on auth endpoints not yet implemented
 
@@ -525,7 +525,7 @@ The spec document is thorough on core architecture but misses several production
 
 **Tasks:**
 - [ ] **Stripe Setup:**
-  - [ ] Create Stripe account. Set up product catalog: Individual Monthly ($19.99), Team Monthly ($79.99), Credit Bundle products (e.g., 3 credits for $11.97, 10 credits for $35.90).
+  - [ ] Create Stripe account. Set up product catalog: Individual Monthly ($9.99, 20 generations), Team Monthly ($19.99, 40 generation sets), Credit Bundle products (e.g., 4 credits for $1.99).
   - [ ] Configure Stripe webhook endpoint: `POST /api/v1/billing/webhook`. Verify signatures with `stripe.Webhook.construct_event`. Handle: `checkout.session.completed` (for credit bundles), `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_succeeded`, `invoice.payment_failed`.
   - [ ] Implement idempotency: dedupe webhook events by `event.id`. Store processed event IDs in Redis or DB to prevent double-processing on Stripe retries.
 - [ ] **Checkout Flows:**
@@ -543,7 +543,7 @@ The spec document is thorough on core architecture but misses several production
   - [ ] On successful generation: decrement credit balance. If balance reaches 0, block generation with "Purchase more credits" prompt.
   - [ ] Credits expire after 12 months — show expiration date in billing dashboard.
 
-**Definition of Done:** A trial user can upgrade to Individual ($19.99/mo) via Stripe Checkout and immediately have unlimited generation (within fair-use cap). A user can buy a 3-credit bundle and use them one at a time. Webhooks correctly update the local DB. Invoice downloads work.
+**Definition of Done:** A trial user can upgrade to Individual ($9.99/mo) via Stripe Checkout and immediately get 20 generations/month. A user can buy a 4-credit bundle ($1.99) and use them one at a time. Webhooks correctly update the local DB. Invoice downloads work.
 
 ---
 
@@ -592,7 +592,7 @@ The spec document is thorough on core architecture but misses several production
   - [x] Role permissions: `admin` can invite/remove members, manage shared profiles, view org usage. `member` can generate using shared profiles and their own profiles.
 - [x] **Team Billing:**
   - [x] Seat pricing: `seat_price_cents` on organization (default $12/seat/month).
-  - [x] Pooled generation quota: `team_quota` (default 250/month), `team_quota_used` tracked.
+  - [x] Pooled generation quota: `team_quota` (default 40/month), `team_quota_used` tracked.
   - [x] `POST /api/v1/organizations/{id}/usage/log` — log a generation for quota tracking.
   - [x] `GET /api/v1/organizations/{id}/usage` — get usage stats, available seats, available generations.
   - [x] `POST /api/v1/organizations/{id}/usage/reset` — reset quota for new period.

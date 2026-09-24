@@ -59,7 +59,7 @@ async def signup(
         plan_tier="trial",
         status="trialing",
         trial_ends_at=trial_ends_at,
-        credits_remaining=5,
+        credits_remaining=2,
         storage_quota_bytes=5_242_880,
     )
     session.add(subscription)

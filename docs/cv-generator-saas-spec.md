@@ -509,10 +509,10 @@ Connect GitHub, pull repos, languages, contribution history, project description
 
 | Feature / Tier | **Free** (Job Post Analyzer) | Pay-Per-Set (Micro-transaction) | Individual Seat (Subscription) | Team / Agency Seat (Subscription) |
 | :--- | :--- | :--- | :--- | :--- |
-| **Price Point** | $0 (no account required) | $3.99 - $5.99 per set | $19.99 / month (after trial) | $79.99 / month (includes 5 seats) + $12/extra seat |
-| **What's Included** | Job post analysis: required skills, implied skills, red flags, salary estimate, company research. No CV generation. | 1 Set (1 CV + 1 Cover Letter) per credit. DOCX & PDF exports. | Unlimited generations (fair-use cap: 50 sets/mo). DOCX, PDF, Markdown. Intelligence layer, interview prep, library, application tracker. | Shared pooled quota (250 sets/mo). DOCX, PDF, Markdown, Bulk ZIP. Centralized org profiles, admin dashboard, team analytics. |
-| **Trial Period** | N/A (always free) | N/A | 14-Day Free Trial (Max 5 generations) | 14-Day Free Trial (Max 15 generations across team) |
-| **Generations** | None (analysis only) | 1 Set per credit purchased | Unlimited (Fair-use cap: 50 sets/mo) | Shared pooled quota (250 sets/mo) |
+|| **Price Point** | $0 (no account required) | $1.99 per 4 extra generations | $9.99 / month (20 generations) | $19.99 / month (40 generation sets, includes 5 seats) |
+| **What's Included** | Job post analysis: required skills, implied skills, red flags, salary estimate, company research. No CV generation. | 4 generations per $1.99 purchase. DOCX & PDF exports. | 20 generations/month. DOCX, PDF, Markdown. Intelligence layer, interview prep, library, application tracker. | Shared pooled quota (40 sets/mo). DOCX, PDF, Markdown, Bulk ZIP. Centralized org profiles, admin dashboard, team analytics. |
+|| **Trial Period** | N/A (always free) | N/A | 14-Day Free Trial (Max 2 generations) | 14-Day Free Trial (Max 20 generations across team) |
+|| **Generations** | None (analysis only) | 4 generations per $1.99 purchase | 20 generations/month | Shared pooled quota (40 sets/mo) |
 | **LLM Provider** | N/A (analysis uses LLM internally) | Cloud Default (Host-provided) | Cloud Default or Custom API Keys | Custom API Keys, Local vLLM/Ollama, Custom Host |
 | **Master Prompts** | N/A | Standard Profile | Multiple Master Profiles | Centralized Org Profiles, Brand Guidelines |
 | **Intelligence Layer** | Basic JD analysis only | N/A | Full: gap analysis, salary intelligence, market demand heatmap, positioning advice | Full, shared across org |
@@ -523,7 +523,7 @@ Connect GitHub, pull repos, languages, contribution history, project description
 **Note:** Team/agency tier is a Phase 4 feature. The MVP focuses on the individual product (Free + Pay-Per-Set + Individual). The free tier (Job Post Analyzer) is the entry point — it requires no account, demonstrates the system's intelligence, and funnels users into the profile-building flow.
 
 ### 2.2 Trial Lifecycle Logic
-1. **Onboarding:** User signs up via OAuth or Email/Password. Trial state initialized with `trial_ends_at = NOW() + 14 DAYS` and `trial_credits_remaining = 5`.
+1. **Onboarding:** User signs up via OAuth or Email/Password. Trial state initialized with `trial_ends_at = NOW() + 14 DAYS` and `trial_credits_remaining = 2`.
 2. **Credit Check Middleware:** Intercepts generation requests. If `now < trial_ends_at` and `trial_credits > 0`, execution proceeds.
 3. **Conversion Trigger:** On Day 12, automated transactional emails and in-app banners prompt subscription confirmation.
 4. **Expiration Handling:** Upon trial expiry, account degrades to `Read-Only` mode (existing CV downloads remain accessible; new generations require payment method attachment).

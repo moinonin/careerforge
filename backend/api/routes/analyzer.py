@@ -89,6 +89,20 @@ async def analyze_job_post(
     return result
 
 
+def _normalize_skill_list(data: Any) -> list[str]:
+    """Normalize LLM response skill data to a list of strings.
+
+    The LLM sometimes returns skills as ``{"Skill Name": True}`` dicts
+    instead of plain string lists. This converts both formats to a clean
+    list of skill name strings.
+    """
+    if isinstance(data, list):
+        return [str(s) for s in data if isinstance(s, str)]
+    if isinstance(data, dict):
+        return [str(k) for k in data.keys() if k]
+    return []
+
+
 async def _run_analyzer(
     job_description: str,
     company_name: str | None,
@@ -133,9 +147,9 @@ async def _run_analyzer(
     response = await adapter.generate(prompt, schema)
 
     result: dict[str, Any] = {
-        "required_skills": response.get("required_skills", []),
-        "implied_skills": response.get("implied_skills", []),
-        "red_flags": response.get("red_flags", []),
+        "required_skills": _normalize_skill_list(response.get("required_skills", [])),
+        "implied_skills": _normalize_skill_list(response.get("implied_skills", [])),
+        "red_flags": _normalize_skill_list(response.get("red_flags", [])),
         "salary_estimate": response.get("salary_estimate"),
         "company_research": response.get("company_research"),
         "keyword_coverage": None,

@@ -8,9 +8,10 @@ const plans = [
   {
     name: "Free",
     price: "$0",
-    description: "Get started with 3 generations.",
+    description: "2 generations free, then $1.99 per 4 extra.",
     features: [
-      "3 CV generations",
+      "2 CV generations/month",
+      "$1.99 per extra 4 generations",
       "DOCX + PDF export",
       "Basic ATS scoring",
       "Community support",
@@ -19,10 +20,10 @@ const plans = [
   },
   {
     name: "Individual",
-    price: "$19.99/mo",
-    description: "Unlimited generations for professionals.",
+    price: "$9.99/mo",
+    description: "20 generations per month for professionals.",
     features: [
-      "Unlimited generations",
+      "20 generations/month",
       "DOCX + PDF export",
       "Full ATS scoring",
       "Priority support",
@@ -32,11 +33,11 @@ const plans = [
   },
   {
     name: "Team",
-    price: "$79.99/mo",
-    description: "For teams and agencies.",
+    price: "$19.99/mo",
+    description: "40 generation sets per month for teams.",
     features: [
       "5 seats included",
-      "250 generation sets/month",
+      "40 generation sets/month",
       "Shared master profiles",
       "Organization admin panel",
       "Priority support",

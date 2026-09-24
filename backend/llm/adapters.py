@@ -34,6 +34,7 @@ class OpenAIAdapter(LLMAdapter):
         self._client = openai.AsyncOpenAI(
             api_key=api_key or os.environ.get("OPENAI_API_KEY", ""),
             base_url=base_url or os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1"),
+            timeout=60.0,
         )
 
     async def generate(

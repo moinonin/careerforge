@@ -200,7 +200,7 @@ export default function BillingPage() {
               disabled={checkingOut}
               className="bg-[rgba(0,0,0,0.08)] hover:bg-[rgba(0,0,0,0.12)] text-sm px-5 py-2.5 rounded-full transition-colors"
             >
-              Upgrade to Individual ($19.99/mo)
+              Upgrade to Individual ($9.99/mo)
             </button>
           )}
           {billing?.plan_tier !== "trial" && (
@@ -209,7 +209,7 @@ export default function BillingPage() {
               disabled={checkingOut}
               className="bg-[rgba(0,0,0,0.08)] hover:bg-[rgba(0,0,0,0.12)] text-sm px-5 py-2.5 rounded-full transition-colors"
             >
-              Change to Team ($79.99/mo)
+              Change to Team ($19.99/mo)
             </button>
           )}
           {billing?.plan_tier !== "trial" && (
