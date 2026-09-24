@@ -320,6 +320,8 @@ target job description.
 --- ROLE CONTEXT (for tailoring) ---
 {role_context}
 
+{jev_context_section}
+
 --- INSTRUCTIONS ---
 1. Study the candidate's master profile above carefully.
 2. Study the job description and role context.
@@ -373,13 +375,17 @@ def assemble_prompt(
     *,
     role_context: str = "",
     output_language: str = "en",
+    jev_context: dict[str, Any] | None = None,
 ) -> str:
     """Fill the master prompt template with *profile* and *job_description*.
 
     Returns the system prompt string to send to the LLM.
 
-    If *role_context* is empty, a ``"Currently: ..."`` line is auto-derived
+    If *role_context* is empty, a ``"Currently: ...`` line is auto-derived
     from the most recent experience entry whose end_date is blank or "Present".
+
+    If *jev_context* is provided, Jev's structured job analysis is inserted
+    into the prompt to guide the LLM's CV generation.
     """
     parts: list[str] = []
 
@@ -432,10 +438,14 @@ def assemble_prompt(
     cv_schema_text = json.dumps(CV_SCHEMA, indent=2)
     cover_schema_text = json.dumps(COVER_LETTER_SCHEMA, indent=2)
 
+    # Build Jev context section if provided
+    jev_section = _build_jev_prompt_section(jev_context) if jev_context else ""
+
     return MASTER_PROMPT_TEMPLATE.format(
         profile_data=profile_text,
         job_description=job_description,
         role_context=role_context,
+        jev_context_section=jev_section,
         cv_schema=cv_schema_text,
         cover_letter_schema=cover_schema_text,
         output_language=(
@@ -444,3 +454,26 @@ def assemble_prompt(
             if output_language != "en" else ""
         ),
     )
+
+
+def _build_jev_prompt_section(jev_context: dict[str, Any]) -> str:
+    """Build a Jev classification section for the prompt."""
+    parts = ["--- JEV JOB ANALYSIS (structured classification) ---\n"]
+    if jev_context.get("primary_skill_category"):
+        parts.append(f"Primary skill category: {jev_context['primary_skill_category']}")
+    if jev_context.get("primary_tech_stack"):
+        parts.append(f"Primary tech stack: {jev_context['primary_tech_stack']}")
+    if jev_context.get("seniority_level"):
+        parts.append(f"Seniority level: {jev_context['seniority_level']} ({jev_context.get('seniority_label', '')})")
+    if jev_context.get("salary_bracket"):
+        parts.append(f"Salary bracket: {jev_context['salary_bracket']}")
+    if jev_context.get("has_red_flags"):
+        parts.append(f"Has red flags: {'yes' if jev_context['has_red_flags'] > 0.5 else 'no'} ({jev_context['has_red_flags']:.2f} confidence)")
+    if jev_context.get("remote_ok"):
+        parts.append(f"Remote work: {'yes' if jev_context['remote_ok'] > 0.5 else 'no'} ({jev_context['remote_ok']:.2f} confidence)")
+    parts.append(
+        "\nUse this structured analysis as CONTEXT to guide your CV generation. "
+        "The candidate's profile and the job description are the authoritative "
+        "sources; Jev's classification helps prioritize which skills to feature."
+    )
+    return "\n".join(parts)

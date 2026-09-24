@@ -59,6 +59,8 @@ class GenerationRequest(BaseModel):
     job_title: str | None = None
     company_name: str | None = None
     output_language: str = "en"  # en, es, de, fr, fi
+    jev_analysis: dict[str, Any] | None = None
+    """Optional Jev structured analysis to guide CV generation."""
 
     class Config:
         from_attributes = True
@@ -157,6 +159,7 @@ async def start_generation(
     provider = request.get("provider")
     model = request.get("model")
     output_language = request.get("output_language", "en")
+    jev_analysis = request.get("jev_analysis")
 
     if output_language not in SUPPORTED_LANGUAGES:
         raise HTTPException(status_code=400, detail=f"Unsupported output_language: {output_language}. Supported: {list(SUPPORTED_LANGUAGES.keys())}")
@@ -209,7 +212,10 @@ async def start_generation(
     await mark_job_processing(session, job.id)
 
     try:
-        cv, cover_letter = await run_generation(session, job, provider=provider, model=model)
+        cv, cover_letter = await run_generation(
+            session, job, provider=provider, model=model,
+            jev_context=jev_analysis,
+        )
 
         cv_markdown = render_cv_markdown(cv)
         cl_markdown = render_cover_letter_markdown(cover_letter)
@@ -506,7 +512,11 @@ async def stream_generation(
             return
 
         profile = MasterProfileData(**profile_row.profile_data)
-        prompt = assemble_prompt(profile=profile, job_description=job.job_description)
+        prompt = assemble_prompt(
+            profile=profile,
+            job_description=job.job_description,
+            jev_context=None,
+        )
 
         # Build adapter from user's config
         from backend.llm.router import build_adapter_from_config

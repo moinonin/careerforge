@@ -79,6 +79,7 @@ async def run_generation(
     *,
     provider: str | None = None,
     model: str | None = None,
+    jev_context: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Run the LLM generation for *job*.
 
@@ -107,6 +108,7 @@ async def run_generation(
         profile=profile,
         job_description=job.job_description,
         output_language=job.output_language,
+        jev_context=jev_context,
     )
 
     # 3. Pick and run the adapter (DB-driven for Sprint 6; env-driven fallback)

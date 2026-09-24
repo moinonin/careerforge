@@ -16,6 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from backend.api.routes import health  # noqa: E402
 from backend.api.routes.admin import router as admin_router  # noqa: E402
 from backend.api.routes.analyzer import router as analyzer_router  # noqa: E402
+from backend.api.routes.jev_analyzer import router as jev_analyzer_router  # noqa: E402
 from backend.api.routes.billing import router as billing_router  # noqa: E402
 from backend.api.routes.feedback import router as feedback_router  # noqa: E402
 from backend.api.routes.generate import router as generate_router  # noqa: E402
@@ -119,6 +120,7 @@ def create_app() -> FastAPI:
     app.include_router(llm_config_router, prefix="/api/v1/llm-config", tags=["llm-config"])
     app.include_router(organizations_router, tags=["organizations"])
     app.include_router(analyzer_router, prefix="/api/v1/analyzer", tags=["analyzer"])
+    app.include_router(jev_analyzer_router, prefix="/api/v1/analyzer", tags=["analyzer"])
     app.include_router(billing_router, prefix="/api/v1/billing", tags=["billing"])
     app.include_router(admin_router, tags=["admin"])
     app.include_router(feedback_router)
