@@ -17,7 +17,7 @@ from backend.database import Base
 class User(Base):
     __tablename__ = "users"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default="gen_random_uuid()")
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
     full_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -57,7 +57,7 @@ class User(Base):
 class MasterProfile(Base):
     __tablename__ = "master_profiles"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default="gen_random_uuid()")
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     title: Mapped[str] = mapped_column(String(255), default="Default Master Profile", nullable=False)
     profile_data: Mapped[dict] = mapped_column(JSON, nullable=False)  # JSONB-compatible; validated by Pydantic at API layer
@@ -82,7 +82,7 @@ class MasterProfile(Base):
 class Subscription(Base):
     __tablename__ = "subscriptions"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default="gen_random_uuid()")
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
     organization_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=True, index=True)
     stripe_customer_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -129,7 +129,7 @@ class LLMConfig(Base):
 class GenerationJob(Base):
     __tablename__ = "generation_jobs"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default="gen_random_uuid()")
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     profile_id: Mapped[str] = mapped_column(String(36), ForeignKey("master_profiles.id", ondelete="SET NULL"), nullable=True, index=True)
     job_title: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -203,7 +203,7 @@ class StoredArtifact(Base):
 class CreditPackage(Base):
     __tablename__ = "credit_packages"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default="gen_random_uuid()")
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     stripe_product_id: Mapped[str] = mapped_column(String(255), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     credits: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -218,7 +218,7 @@ class CreditPackage(Base):
 class UserCredit(Base):
     __tablename__ = "user_credits"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default="gen_random_uuid()")
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     owner_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     package_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("credit_packages.id", ondelete="SET NULL"), nullable=True, index=True)
     credits: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -237,7 +237,7 @@ class UserCredit(Base):
 class AuditLog(Base):
     __tablename__ = "audit_logs"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default="gen_random_uuid()")
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     actor_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     action: Mapped[str] = mapped_column(String(100), nullable=False)
     details: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -255,7 +255,7 @@ class AuditLog(Base):
 class Notification(Base):
     __tablename__ = "notifications"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default="gen_random_uuid()")
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     recipient_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     type: Mapped[str] = mapped_column(String(50), nullable=False)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -275,7 +275,7 @@ class Notification(Base):
 class EmailQueue(Base):
     __tablename__ = "email_queue"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default="gen_random_uuid()")
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     recipient_email: Mapped[str] = mapped_column(String(255), nullable=False)
     template_id: Mapped[str] = mapped_column(String(100), nullable=False)
     subject: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -297,7 +297,7 @@ class EmailQueue(Base):
 class Organization(Base):
     __tablename__ = "organizations"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default="gen_random_uuid()")
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     owner_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     max_seats: Mapped[int] = mapped_column(Integer, default=5, nullable=False)
@@ -328,7 +328,7 @@ class Organization(Base):
 class OrganizationMember(Base):
     __tablename__ = "organization_members"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default="gen_random_uuid()")
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     organization_id: Mapped[str] = mapped_column(String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
     user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     role: Mapped[str] = mapped_column(String(50), default="member", nullable=False)  # admin | member
@@ -352,7 +352,7 @@ class OrganizationMember(Base):
 class OrganizationMasterProfile(Base):
     __tablename__ = "organization_master_profiles"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default="gen_random_uuid()")
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     organization_id: Mapped[str] = mapped_column(String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     profile_data: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
@@ -377,7 +377,7 @@ class OrganizationMasterProfile(Base):
 class OrganizationUsageLog(Base):
     __tablename__ = "organization_usage_log"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default="gen_random_uuid()")
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     organization_id: Mapped[str] = mapped_column(String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
     user_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     generation_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
@@ -401,7 +401,7 @@ class OrganizationUsageLog(Base):
 class OrganizationInvitation(Base):
     __tablename__ = "organization_invitations"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default="gen_random_uuid()")
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     organization_id: Mapped[str] = mapped_column(String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
     email: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(String(50), default="member", nullable=False)
@@ -424,7 +424,7 @@ class OrganizationInvitation(Base):
 class RefreshToken(Base):
     __tablename__ = "refresh_tokens"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default="gen_random_uuid()")
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     token_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     user_agent: Mapped[str | None] = mapped_column(String(511), nullable=True)
@@ -457,7 +457,7 @@ GenerationJob.stored_artifacts = relationship(
 class GenerationMetric(Base):
     __tablename__ = "generation_metrics"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default="gen_random_uuid()")
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     generation_job_id: Mapped[str] = mapped_column(String(36), ForeignKey("generation_jobs.id", ondelete="CASCADE"), nullable=False, index=True)
     organization_id: Mapped[str] = mapped_column(String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
     user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
@@ -483,7 +483,7 @@ class GenerationMetric(Base):
 class Feedback(Base):
     __tablename__ = "feedback"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default="gen_random_uuid()")
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     generation_job_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("generation_jobs.id", ondelete="SET NULL"), nullable=True, index=True)
     rating: Mapped[int] = mapped_column(Integer, nullable=False)  # 1 (negative) or 2 (positive)
