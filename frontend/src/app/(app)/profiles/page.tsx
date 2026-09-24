@@ -6,6 +6,7 @@ import {
   listProfiles,
   createProfile,
   updateProfile,
+  deleteProfile,
   getProfile,
   type ProfileListEntry,
   type MasterProfileData,
@@ -405,6 +406,22 @@ export default function ProfilesPage() {
     }
   };
 
+  const handleDeleteProfile = async (id: string, title: string) => {
+    if (!confirm(`Delete "${title}"? This cannot be undone.`)) return
+    try {
+      await deleteProfile(id)
+      setProfiles(prev => prev.filter(p => p.id !== id))
+      if (profileId === id) {
+        setProfileId(null)
+        setForm(emptyForm())
+      }
+      setErrorMsg("Profile deleted")
+      setTimeout(() => setErrorMsg(""), 3000)
+    } catch (e: any) {
+      setErrorMsg("Failed to delete profile: " + e.message)
+    }
+  };
+
   const handleNewProfile = async () => {
     try {
       const data = await createProfile("New Profile", {
@@ -571,6 +588,16 @@ export default function ProfilesPage() {
                 >
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <h3 className="font-medium text-sm truncate">{p.title}</h3>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleDeleteProfile(p.id, p.title)
+                      }}
+                      className="text-xs text-red-400 hover:text-red-600 transition-colors shrink-0"
+                      title="Delete profile"
+                    >
+                      ✕
+                    </button>
                     {p.is_default && (
                       <span className="badge badge-default text-[10px]">Default</span>
                     )}
