@@ -880,13 +880,23 @@ function DashboardContent() {
                   </svg>
                   <h3>No resumes yet</h3>
                   <p>Create your first resume to get started. You can build from a profile or start fresh.</p>
-                  <a href="/profiles" className="dashboard-button dashboard-button-primary" style={{marginTop: '1rem'}}>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="dashboard-button-icon">
-                      <line x1="12" y1="5" x2="12" y2="19" />
-                      <line x1="5" y1="12" x2="19" y2="12" />
-                    </svg>
-                    Create Resume
-                  </a>
+                  <div className="flex items-center gap-3 mt-4">
+                    <a href="/profiles" className="dashboard-button dashboard-button-primary">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="dashboard-button-icon">
+                        <line x1="12" y1="5" x2="12" y2="19" />
+                        <line x1="5" y1="12" x2="19" y2="12" />
+                      </svg>
+                      Create Resume
+                    </a>
+                    <a href="/profiles/upload" className="dashboard-button dashboard-button-secondary">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="dashboard-button-icon">
+                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                        <polyline points="17 8 12 3 7 8" />
+                        <line x1="12" y1="3" x2="12" y2="15" />
+                      </svg>
+                      Import CV
+                    </a>
+                  </div>
                 </div>
               </div>
             </div>

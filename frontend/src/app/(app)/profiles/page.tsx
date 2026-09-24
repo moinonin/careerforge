@@ -525,11 +525,14 @@ export default function ProfilesPage() {
             <button onClick={handleNewProfile} className="btn btn-primary btn-sm">
               + New Profile
             </button>
+            <button onClick={() => router.push("/profiles/upload")} className="btn btn-secondary btn-sm">
+              Import CV
+            </button>
           </div>
 
           {profiles.length === 0 ? (
             <div className="text-center py-12 text-[var(--color-text-faint)] text-sm">
-              No profiles yet. Click "New Profile" to create one.
+              No profiles yet. <a href="/profiles/upload" className="text-blue-400 hover:underline">Import a CV</a> to pre-fill your profile, or click "New Profile" to fill the form manually.
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
