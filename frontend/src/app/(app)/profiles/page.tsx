@@ -342,6 +342,7 @@ export default function ProfilesPage() {
   // Pre-fill form with imported CV data when arriving from upload page
   useEffect(() => {
     if (!imported) return
+    let cancelled = false
     try {
       const raw = sessionStorage.getItem("cv_import_data")
       if (raw) {
@@ -362,10 +363,20 @@ export default function ProfilesPage() {
             projects: imported.projects || prev.projects,
           }
         })
+        // Create a profile from imported data so the user can edit and save
+        createProfile("Imported CV", importedData)
+          .then(data => {
+            if (!cancelled) {
+              setProfileId(data.id)
+              setProfiles(prev => [data, ...prev])
+            }
+          })
+          .catch(() => {})
         // Clear sessionStorage so it doesn't re-apply on refresh
         sessionStorage.removeItem("cv_import_data")
       }
     } catch { /* ignore parse errors */ }
+    return () => { cancelled = true }
   }, [imported])
 
   const selectProfile = async (id: string) => {
