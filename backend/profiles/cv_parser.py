@@ -8,6 +8,7 @@ defaults so the user can fill them in via the wizard.
 
 from __future__ import annotations
 
+import io
 import logging
 import re
 from typing import Any
@@ -31,38 +32,11 @@ class _ParsedSection(BaseModel):
     confidence_flags: dict[str, str] = {}
 
 
-def _extract_docx_text(file_bytes: bytes) -> str:
-    """Extract plain text from a .docx file."""
-    import io
-    from docx import Document
 
-    doc = Document(io.BytesIO(file_bytes))
-    paragraphs = []
-    for p in doc.paragraphs:
-        text = p.text.strip()
-        if text:
-            paragraphs.append(text)
-    return "\n".join(paragraphs)
-
-
-def _extract_pdf_text(file_bytes: bytes) -> str:
-    """Extract plain text from a .pdf file."""
-    from pypdf import PdfReader
-
-    reader = PdfReader(io.BytesIO(file_bytes))
-    pages = []
-    for page in reader.pages:
-        text = page.extract_text()
-        if text:
-            pages.append(text)
-    return "\n".join(pages)
-
-
-import io
 
 
 def parse_cv(file_bytes: bytes, filename: str) -> _ParsedSection:
-    """Parse a CV file (DOCX or PDF) and return extracted profile data.
+    """Parse a CV file (DOCX or PDF) using pymupdf extraction.
 
     Parameters
     ----------
@@ -74,21 +48,16 @@ def parse_cv(file_bytes: bytes, filename: str) -> _ParsedSection:
     Returns
     -------
     _ParsedSection
-        Extracted data with confidence flags indicating which fields
-        could not be reliably parsed.
+        Extracted data with confidence flags.
     """
-    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    text = extract_text(file_bytes, filename)
 
-    if ext == "docx":
-        text = _extract_docx_text(file_bytes)
-    elif ext == "pdf":
-        text = _extract_pdf_text(file_bytes)
-    else:
+    if not text.strip():
         return _ParsedSection(confidence_flags={
-            "contact": "unsupported_format",
-            "education": "unsupported_format",
-            "experience": "unsupported_format",
-            "skills": "unsupported_format",
+            "contact": "empty_text",
+            "education": "empty_text",
+            "experience": "empty_text",
+            "skills": "empty_text",
         })
 
     return _parse_text(text)
@@ -255,10 +224,10 @@ def _process_section(
 # ── pymupdf-based extraction (better quality) ──────────────────────────
 
 def extract_text(file_bytes: bytes, filename: str) -> str:
-    """Extract plain text from a PDF or DOCX file using pymupdf (preferred).
+    """Extract plain text from a PDF or DOCX file using pymupdf.
 
-    pymupdf preserves section headers and multi-column layouts much better
-    than pypdf. Falls back to pypdf if pymupdf is not available.
+    pymupdf preserves section headers and multi-column layouts
+    much better than the old pypdf extraction.
     """
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
 
@@ -270,39 +239,21 @@ def extract_text(file_bytes: bytes, filename: str) -> str:
 
 
 def _extract_pdf_pymupdf(file_bytes: bytes) -> str:
-    """Extract text from PDF using pymupdf (best quality)."""
-    try:
-        import pymupdf
-        doc = pymupdf.open(stream=file_bytes, filetype="pdf")
-        pages = []
-        for page in doc:
-            text = page.get_text()
-            if text.strip():
-                pages.append(text)
-        doc.close()
-        return "\n\n".join(pages)
-    except ImportError:
-        logger.warning("pymupdf not available, falling back to pypdf")
-        return _extract_pdf_pypdf(file_bytes)
-
-
-def _extract_pdf_pypdf(file_bytes: bytes) -> str:
-    """Extract text from PDF using pypdf (fallback)."""
-    from pypdf import PdfReader
-    import io
-    reader = PdfReader(io.BytesIO(file_bytes))
-    pages = []
-    for page in reader.pages:
-        text = page.extract_text()
-        if text:
-            pages.append(text)
+    """Extract text from PDF using pymupdf."""
+    import pymupdf
+    doc = pymupdf.open(stream=file_bytes, filetype="pdf")
+    pages: list[str] = []
+    for page in doc:
+        text = page.get_text()
+        if text and text.strip():
+            pages.append(str(text))
+    doc.close()
     return "\n\n".join(pages)
 
 
 def _extract_docx(file_bytes: bytes) -> str:
     """Extract text from DOCX."""
     from docx import Document
-    import io
     doc = Document(io.BytesIO(file_bytes))
     paragraphs = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
     return "\n".join(paragraphs)
