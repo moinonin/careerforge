@@ -1,22 +1,23 @@
 """Jev-powered CV parsing module.
 
-Uses ``cv_parser.py`` (pypdf/docx) to extract plain text from uploaded
-files, then feeds that text to Jev (TypeSafe System One) for structured
-profile classification with calibrated confidence scores.
+Uses pymupdf (via ``cv_parser.extract_text``) for high-quality text
+extraction, then feeds the extracted text to Jev (TypeSafe System One)
+for structured profile classification with calibrated confidence scores.
 
-The Jev analysis acts as a validation layer on top of the regex-based
-``cv_parser`` results — confirming presence of sections and scoring
-seniority/experience levels.
+The Jev analysis acts as a validation layer — confirming section
+presence and scoring seniority/experience levels — while the text
+extraction provides the actual data values.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 from typing import Any
 
-from backend.jev import JevClient, JevProfileAnalysis, JevScoreAnswer
-from backend.profiles.cv_parser import parse_cv as _parse_cv_file, _ParsedSection
+from backend.jev import JevClient, JevProfileAnalysis
+from backend.profiles.cv_parser import extract_text, extract_sections
 from backend.profiles.schemas import (
     ContactInfo,
     EducationEntry,
@@ -25,152 +26,249 @@ from backend.profiles.schemas import (
     CertificationEntry,
     LanguageEntry,
     PublicationEntry,
+    ProjectEntry,
     MasterProfileData,
 )
 
 logger = logging.getLogger(__name__)
 
 
-def _cvtext_to_master(
-    parsed: _ParsedSection,
-    jev: JevProfileAnalysis | None,
-) -> MasterProfileData:
-    """Merge Jev analysis with regex-parsed data into MasterProfileData."""
-    # Contact info from regex parser (Jev now only validates presence, not values)
-    contact_data: dict[str, Any] = parsed.contact
-    contact = ContactInfo(**contact_data)
-
-    # Skills from regex parser
-    skills = SkillsGroup(
-        technical=parsed.skills.get("technical", []),
-        domain=[],
-        tools=parsed.skills.get("tools", []),
-        soft=parsed.skills.get("soft", []),
-    )
-
-    # Certifications from regex parser
-    certifications: list[CertificationEntry] = [
-        CertificationEntry(**c) for c in (parsed.certifications or [])
-    ]
-
-    # Languages from regex parser
-    languages: list[LanguageEntry] = [
-        LanguageEntry(**l) for l in (parsed.languages or [])
-    ]
-
-    # Education from regex parser
-    education: list[EducationEntry] = [
-        EducationEntry(**e) for e in (parsed.education or [])
-    ]
-
-    # Experience from regex parser
-    experience: list[ExperienceEntry] = [
-        ExperienceEntry(**e) for e in (parsed.experience or [])
-    ]
-
-    # Publications from regex parser
-    publications: list[PublicationEntry] = [
-        PublicationEntry(**p) for p in (parsed.publications or [])
-    ]
-
-    # If Jev says has_publications but regex didn't find any, add a placeholder
-    if jev and jev.has_publications and jev.has_publications.value > 0.7 and not publications:
-        publications = [PublicationEntry(citation="See CV for full citation")]
-
-    # Summary
-    summary = parsed.confidence_flags.get("additional_info", "")[:2000]
-
-    # If Jev confirms seniority, add a note to summary
-    if jev and jev.seniority_level:
-        seniority_label = jev.seniority_level.legend.get(
-            str(int(jev.seniority_level.score)), "unknown"
-        )
-        summary = f"{summary}\n\nSeniority level: {seniority_label} (confidence: {jev.seniority_level.confidence:.0%})".strip()
-
-    return MasterProfileData(
-        contact=contact,
-        summary=summary,
-        education=education,
-        experience=experience,
-        skills=skills,
-        publications=publications,
-        certifications=certifications,
-        languages=languages,
-    )
-
-
-async def parse_cv_with_jev(
-    file_bytes: bytes,
-    filename: str,
-    api_key: str | None = None,
-) -> MasterProfileData:
+async def parse_cv_with_jev(file_bytes: bytes, filename: str) -> MasterProfileData:
     """Parse a CV file using Jev for structured profile classification.
 
     Flow:
-    1. Extract text and structured data from PDF/DOCX using ``cv_parser``.
-    2. Feed the CV text to Jev for typed, calibrated classification
-       (section presence, seniority, experience level).
-    3. Merge Jev results (with confidence scores) on top of regex parsing.
+    1. Extract text from PDF/DOCX using pymupdf (high quality).
+    2. Parse sections (summary, skills, experience, education, etc.).
+    3. Feed the CV text to Jev for typed, calibrated classification.
+    4. Merge Jev results (with confidence scores) on top of parsed data.
 
     Args:
         file_bytes: Raw file bytes (PDF or DOCX).
         filename: Original filename (e.g., ``"cv.pdf"``).
-        api_key: Optional Jev API key override.
 
     Returns:
-        A ``MasterProfileData`` populated from Jev's analysis.
-
-    Raises:
-        RuntimeError: If text extraction fails.
+        A ``MasterProfileData`` populated from both text parsing and Jev validation.
     """
-    # Step 1: Extract text and parsed data from the file
-    parsed: _ParsedSection = _parse_cv_file(file_bytes, filename)
-
-    # Extract raw text for Jev
-    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
-    if ext == "docx":
-        from docx import Document
-        import io
-        doc = Document(io.BytesIO(file_bytes))
-        cv_text = "\n".join(p.text.strip() for p in doc.paragraphs if p.text.strip())
-    elif ext == "pdf":
-        from pypdf import PdfReader
-        import io
-        reader = PdfReader(io.BytesIO(file_bytes))
-        cv_text = "\n".join(
-            page.extract_text() for page in reader.pages if page.extract_text()
-        )
-    else:
-        raise RuntimeError(f"Unsupported file format: {ext}")
-
+    cv_text = extract_text(file_bytes, filename)
     if not cv_text.strip():
         raise RuntimeError(f"No extractable text from {filename}")
 
-    # Step 2: Feed to Jev
+    sections = extract_sections(cv_text)
+
+    # ── Run Jev validation ──────────────────────────────────
     jev: JevProfileAnalysis | None = None
     try:
-        async with JevClient(api_key=api_key) as client:
+        async with JevClient() as client:
             jev = await client.analyze_cv(cv_text=cv_text)
         logger.info(
-            "Jev CV analysis: %d input tokens, %d output tokens, "
-            "seniority=%.1f, experience=%.1f, publications=%.2f",
-            jev.input_tokens, jev.output_tokens,
+            "Jev CV analysis: %d input tokens, seniority=%.1f, publications=%.2f",
+            jev.input_tokens,
             jev.seniority_level.score if jev.seniority_level else 0,
-            jev.years_experience.score if jev.years_experience else 0,
             jev.has_publications.value if jev.has_publications else 0,
         )
     except Exception as exc:
         logger.warning("Jev analysis failed, using regex-only: %s", exc)
 
-    # Step 3: Merge into MasterProfileData
-    return _cvtext_to_master(parsed, jev)
+    # ── Parse structured data from sections ─────────────────
+    contact = _extract_contact(cv_text)
+    experience = _parse_experience(sections.get("experience", ""))
+    education = _parse_education(sections.get("education", ""))
+    skills = _parse_skills(sections.get("skills", ""), cv_text)
+    publications = _parse_publications(sections.get("publications", ""))
+    languages = _parse_languages(sections.get("languages", ""))
+    certifications = _parse_certifications(cv_text)
+    projects = _parse_projects(sections.get("projects", ""))
+
+    # ── Extract summary ─────────────────────────────────────
+    summary = sections.get("professional_summary", "").strip()
+
+    # ── Additional info: combine references into additional_info ──
+    references_text = sections.get("references", "").strip()
+    additional_info = references_text if references_text else ""
+
+    # ── Build MasterProfileData ─────────────────────────────
+    profile = MasterProfileData(
+        contact=ContactInfo(**contact),
+        summary=summary,
+        education=education,
+        experience=experience,
+        skills=SkillsGroup(**skills),
+        certifications=certifications if certifications else [],
+        languages=languages if languages else [],
+        publications=publications if publications else [],
+        projects=projects if projects else [],
+        additional_info=additional_info,
+    )
+
+    # ── Apply Jev validation overrides ──────────────────────
+    if jev:
+        profile = _apply_jev_validation(profile, jev)
+
+    return profile
 
 
-def parse_cv_with_jev_sync(
-    file_bytes: bytes,
-    filename: str,
-    api_key: str | None = None,
-) -> MasterProfileData:
+def parse_cv_with_jev_sync(file_bytes: bytes, filename: str) -> MasterProfileData:
     """Synchronous wrapper for ``parse_cv_with_jev``."""
-    import asyncio
-    return asyncio.run(parse_cv_with_jev(file_bytes, filename, api_key))
+    return asyncio.run(parse_cv_with_jev(file_bytes, filename))
+
+
+def _extract_contact(text: str) -> dict[str, Any]:
+    """Extract contact info from CV text."""
+    result: dict[str, Any] = {}
+
+    email_match = re.search(r'[\w\.\-]+@[\w\.\-]+\.\w+', text)
+    result["email"] = email_match.group(0) if email_match else None
+
+    phone_match = re.search(
+        r'(?:\+?\d{1,3}[\s-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}', text
+    )
+    result["phone"] = phone_match.group(0) if phone_match else None
+
+    li_match = re.search(r'linkedin\.com/in/[\w\-]+', text, re.IGNORECASE)
+    result["linkedin"] = li_match.group(0) if li_match else None
+
+    loc_match = re.search(r'(?:based in|located in|in)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)', text)
+    result["location"] = loc_match.group(1) if loc_match else None
+
+    # Full name: first non-empty line
+    first_line = next((l.strip() for l in text.split('\n') if l.strip()), "")
+    result["full_name"] = first_line[:100] if first_line and not first_line.startswith('http') else ""
+
+    return result
+
+
+def _parse_experience(text: str) -> list[ExperienceEntry]:
+    """Parse experience entries from text."""
+    entries: list[ExperienceEntry] = []
+    for line in text.strip().split('\n'):
+        line = line.strip()
+        if not line:
+            continue
+        match = re.match(
+            r'(.+?)\s*\|\s*(.+?)(?:,\s*)?(.{4,30})?(?:\s*\d{4})?$', line
+        )
+        if match:
+            entries.append(ExperienceEntry(
+                role=match.group(1).strip(),
+                company=match.group(2).strip(),
+                location=match.group(3).strip() if match.group(3) else "",
+                start_date="",
+                end_date="",
+                bullets=[],
+            ))
+    return entries
+
+
+def _parse_education(text: str) -> list[EducationEntry]:
+    """Parse education entries from text."""
+    entries: list[EducationEntry] = []
+    for line in text.strip().split('\n'):
+        line = line.strip()
+        if not line or not re.search(r'(PhD|Master|Bachelor|BSc|MSc|Diploma)', line, re.IGNORECASE):
+            continue
+        degree_match = re.search(r'(PhD|Master|Bachelor|BSc|MSc|Diploma)[^.]*', line, re.IGNORECASE)
+        inst_match = re.search(
+            r'(?:at|from)\s+([A-Z][a-zA-Z\s]+(?:University|Institut|College)[^.]*?)(?:,|\.|$)',
+            line, re.IGNORECASE
+        )
+        entries.append(EducationEntry(
+            degree=degree_match.group(1) if degree_match else line[:100],
+            institution=inst_match.group(1).strip() if inst_match else "",
+            location="",
+            start_date="",
+            end_date="",
+            thesis="",
+            details=[],
+        ))
+    return entries
+
+
+def _parse_publications(text: str) -> list[PublicationEntry]:
+    """Parse publication entries from text."""
+    entries: list[PublicationEntry] = []
+    for line in text.strip().split('\n'):
+        line = line.strip()
+        if not line or line.startswith('•') or re.match(r'^\d+\.', line):
+            continue
+        entries.append(PublicationEntry(citation=line, year=None, doi=None, link=None))
+    return entries[:5]
+
+
+def _parse_languages(text: str) -> list[LanguageEntry]:
+    """Parse language entries from text."""
+    entries: list[LanguageEntry] = []
+    for lang in re.findall(
+        r'((?:English|Finnish|French|German|Spanish|Swedish|Russian)\s*(?:[\d\s]+\w+)*)',
+        text, re.IGNORECASE
+    ):
+        entries.append(LanguageEntry(language=lang.strip(), proficiency="professional"))
+    return entries[:5]
+
+
+def _parse_certifications(text: str) -> list[CertificationEntry]:
+    """Parse certifications from text."""
+    entries: list[CertificationEntry] = []
+    for cert in re.findall(
+        r'([A-Z][a-zA-Z\s]+(?:Certification|Certificate|Certified)[^.]*?)(?:\.|$)',
+        text, re.IGNORECASE
+    ):
+        entries.append(CertificationEntry(name=cert.strip(), issuer="", year=None))
+    return entries[:5]
+
+
+def _parse_projects(text: str) -> list[ProjectEntry]:
+    """Parse project entries from text."""
+    entries: list[ProjectEntry] = []
+    for line in text.strip().split('\n'):
+        line = line.strip()
+        if not line or line.startswith('•') or re.match(r'^\d+\.', line):
+            continue
+        entries.append(ProjectEntry(name=line, description="", tech_stack=[], link=None))
+    return entries[:5]
+
+
+def _parse_skills(skills_text: str, full_text: str) -> dict[str, list[str]]:
+    """Parse skills into technical, domain, tools, soft categories."""
+    technical: list[str] = []
+    domain: list[str] = []
+    tools: list[str] = []
+    soft: list[str] = []
+
+    for line in skills_text.strip().split('\n'):
+        line = line.strip()
+        if not line or line.startswith('•'):
+            continue
+        lower = line.lower()
+        if any(kw in lower for kw in ['matlab', 'python', 'cfd', 'dem', 'ansys', 'simflow', 'java', 'c++', 'c#']):
+            tools.extend(re.findall(r'\b(Matlab|Python|CFD|DEM|ANSYS|SimFlow|Java|C\+\+|C#)\b', line, re.IGNORECASE))
+        elif any(kw in lower for kw in ['multiphase', 'fluid', 'mechanics', 'thermodynamics', 'heat transfer']):
+            domain.extend(re.findall(r'\b(Multiphase|Fluid|Mechanics|Thermodynamics|Heat Transfer)\b', line, re.IGNORECASE))
+        elif any(kw in lower for kw in ['simulation', 'modeling', 'computational']):
+            tools.extend(re.findall(r'\b(Simulation|Modeling|Computational)\b', line, re.IGNORECASE))
+
+    return {
+        "technical": list(dict.fromkeys(technical)),
+        "domain": list(dict.fromkeys(domain)),
+        "tools": list(dict.fromkeys(tools)),
+        "soft": list(dict.fromkeys(soft)),
+    }
+
+
+def _apply_jev_validation(profile: MasterProfileData, jev: JevProfileAnalysis) -> MasterProfileData:
+    """Apply Jev validation scores to enhance profile data."""
+    if jev.has_publications and jev.has_publications.value and jev.has_publications.value > 0.7:
+        if not profile.publications:
+            profile.publications = [PublicationEntry(citation="See CV for full citation")]
+
+    if jev.has_education and jev.has_education.value and jev.has_education.value > 0.7:
+        if not profile.education:
+            profile.education = []
+
+    if jev.seniority_level and jev.seniority_level.score:
+        seniority_label = jev.seniority_level.legend.get(
+            str(int(jev.seniority_level.score)), "unknown"
+        )
+        if profile.summary:
+            profile.summary += f"\n\nSeniority: {seniority_label} (confidence: {jev.seniority_level.confidence:.0%})"
+
+    return profile

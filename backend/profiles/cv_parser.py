@@ -8,10 +8,13 @@ defaults so the user can fill them in via the wizard.
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any
 
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 
 class _ParsedSection(BaseModel):
@@ -247,3 +250,93 @@ def _process_section(
         for line in lines:
             if line.strip():
                 result.projects.append({"title": line.strip(), "description": ""})
+
+
+# ── pymupdf-based extraction (better quality) ──────────────────────────
+
+def extract_text(file_bytes: bytes, filename: str) -> str:
+    """Extract plain text from a PDF or DOCX file using pymupdf (preferred).
+
+    pymupdf preserves section headers and multi-column layouts much better
+    than pypdf. Falls back to pypdf if pymupdf is not available.
+    """
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+
+    if ext == "pdf":
+        return _extract_pdf_pymupdf(file_bytes)
+    elif ext == "docx":
+        return _extract_docx(file_bytes)
+    return ""
+
+
+def _extract_pdf_pymupdf(file_bytes: bytes) -> str:
+    """Extract text from PDF using pymupdf (best quality)."""
+    try:
+        import pymupdf
+        doc = pymupdf.open(stream=file_bytes, filetype="pdf")
+        pages = []
+        for page in doc:
+            text = page.get_text()
+            if text.strip():
+                pages.append(text)
+        doc.close()
+        return "\n\n".join(pages)
+    except ImportError:
+        logger.warning("pymupdf not available, falling back to pypdf")
+        return _extract_pdf_pypdf(file_bytes)
+
+
+def _extract_pdf_pypdf(file_bytes: bytes) -> str:
+    """Extract text from PDF using pypdf (fallback)."""
+    from pypdf import PdfReader
+    import io
+    reader = PdfReader(io.BytesIO(file_bytes))
+    pages = []
+    for page in reader.pages:
+        text = page.extract_text()
+        if text:
+            pages.append(text)
+    return "\n\n".join(pages)
+
+
+def _extract_docx(file_bytes: bytes) -> str:
+    """Extract text from DOCX."""
+    from docx import Document
+    import io
+    doc = Document(io.BytesIO(file_bytes))
+    paragraphs = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
+    return "\n".join(paragraphs)
+
+
+def extract_sections(text: str) -> dict[str, Any]:
+    """Parse extracted text into section-based structure."""
+    section_markers = [
+        ("professional_summary", ["PROFESSIONAL SUMMARY", "PROFILE", "SUMMARY"]),
+        ("skills", ["CORE TECHNICAL COMPETENCIES", "SKILLS", "TECHNICAL SKILLS"]),
+        ("experience", ["PROFESSIONAL EXPERIENCE", "WORK EXPERIENCE"]),
+        ("education", ["EDUCATION", "ACADEMIC BACKGROUND"]),
+        ("publications", ["PUBLICATIONS", "PEER-REVIEWED PUBLICATIONS"]),
+        ("languages", ["LANGUAGES", "LANGUAGES & PROFESSIONAL REFERENCES"]),
+        ("references", ["REFERENCES", "PROFESSIONAL REFERENCES"]),
+        ("projects", ["PROJECTS", "PROJECT RESEARCH"]),
+    ]
+
+    sections: dict[str, str] = {}
+    current_section: str | None = None
+
+    for line in text.split("\n"):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        upper = stripped.upper()
+        found = False
+        for section_name, markers in section_markers:
+            if upper == markers[0] or any(upper.startswith(m) for m in markers):
+                current_section = section_name
+                sections[section_name] = ""
+                found = True
+                break
+        if not found and current_section:
+            sections[current_section] += stripped + "\n"
+
+    return sections
