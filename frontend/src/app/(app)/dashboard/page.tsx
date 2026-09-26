@@ -893,7 +893,7 @@ function DashboardContent() {
             <div className="dashboard-card">
               <div className="dashboard-card-header">
                 <h2 className="dashboard-card-title">Your Resumes</h2>
-                <a href="/profiles" className="dashboard-button dashboard-button-primary dashboard-button-sm">
+                <a href="/dashboard" className="dashboard-button dashboard-button-primary dashboard-button-sm">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="dashboard-button-icon">
                     <line x1="12" y1="5" x2="12" y2="19" />
                     <line x1="5" y1="12" x2="19" y2="12" />
@@ -912,7 +912,7 @@ function DashboardContent() {
                   <h3>No resumes yet</h3>
                   <p>Create your first resume to get started. You can build from a profile or start fresh.</p>
                   <div className="flex items-center gap-3 mt-4">
-                    <a href="/profiles" className="dashboard-button dashboard-button-primary">
+                    <a href="/dashboard" className="dashboard-button dashboard-button-primary">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="dashboard-button-icon">
                         <line x1="12" y1="5" x2="12" y2="19" />
                         <line x1="5" y1="12" x2="19" y2="12" />
@@ -939,7 +939,7 @@ function DashboardContent() {
             <div className="dashboard-card">
               <div className="dashboard-card-header">
                 <h2 className="dashboard-card-title">Your Cover Letters</h2>
-                <a href="/profiles" className="dashboard-button dashboard-button-primary dashboard-button-sm">
+                <a href="/dashboard" className="dashboard-button dashboard-button-primary dashboard-button-sm">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="dashboard-button-icon">
                     <line x1="12" y1="5" x2="12" y2="19" />
                     <line x1="5" y1="12" x2="19" y2="12" />
@@ -957,7 +957,7 @@ function DashboardContent() {
                   </svg>
                   <h3>No cover letters yet</h3>
                   <p>Generate a CV to get a matching cover letter automatically.</p>
-                  <a href="/profiles" className="dashboard-button dashboard-button-primary" style={{marginTop: '1rem'}}>
+                  <a href="/dashboard" className="dashboard-button dashboard-button-primary" style={{marginTop: '1rem'}}>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="dashboard-button-icon">
                       <line x1="12" y1="5" x2="12" y2="19" />
                       <line x1="5" y1="12" x2="19" y2="12" />

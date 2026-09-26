@@ -28,13 +28,13 @@ class ErrorHandlerMiddleware:
                 # Check for error status codes
                 status_code = message.get("status", 200)
                 if status_code >= 500:
-                    await self._send_error_page(send, status_code, "500")
+                    await self._send_error_page(scope, receive, send, status_code, "500")
                     return
             await send(message)
 
         await self.app(scope, receive, wrapped_send)
 
-    async def _send_error_page(self, send: Send, status_code: int, title: str) -> None:
+    async def _send_error_page(self, scope: Scope, receive: Receive, send: Send, status_code: int, title: str) -> None:
         """Send a static error HTML page."""
         import os
 
