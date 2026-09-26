@@ -47,6 +47,11 @@ class OpenAIAdapter(LLMAdapter):
             if lines and lines[-1].strip() == "```":
                 lines = lines[:-1]
             stripped = "\n".join(lines).strip()
+        # Find the first { and last } to extract just the JSON object
+        start = stripped.find("{")
+        end = stripped.rfind("}")
+        if start >= 0 and end > start:
+            stripped = stripped[start:end + 1]
         return stripped
 
     async def generate(
