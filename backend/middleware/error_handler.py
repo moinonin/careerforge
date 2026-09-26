@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from starlette.responses import HTMLResponse
 from starlette.types import ASGIApp, Scope, Receive, Send
 
 from backend.config import settings
@@ -33,14 +32,14 @@ class ErrorHandlerMiddleware:
                 status_code = message.get("status", 200)
                 if status_code >= 500:
                     _error_sent = True
-                    await self._send_error_page(scope, receive, send, status_code, "500")
+                    await self._send_error_page(wrapped_send, status_code, "500")
                     return
             await send(message)
 
         await self.app(scope, receive, wrapped_send)
 
-    async def _send_error_page(self, scope: Scope, receive: Receive, send: Send, status_code: int, title: str) -> None:
-        """Send a static error HTML page."""
+    async def _send_error_page(self, send: Send, status_code: int, title: str) -> None:
+        """Send a static error HTML page directly as ASGI messages."""
         import os
 
         error_dir = os.path.join(
@@ -55,8 +54,16 @@ class ErrorHandlerMiddleware:
         else:
             html = f"<html><body><h1>{title}</h1></body></html>"
 
-        response = HTMLResponse(content=html, status_code=status_code)
-        await response(scope, receive, send)
+        body = html.encode("utf-8")
+        await send({
+            "type": "http.response.start",
+            "status": status_code,
+            "headers": [
+                (b"content-type", b"text/html; charset=utf-8"),
+                (b"content-length", str(len(body)).encode()),
+            ],
+        })
+        await send({"type": "http.response.body", "body": body})
 
 
 def error_handler_middleware(app: ASGIApp) -> ASGIApp:
