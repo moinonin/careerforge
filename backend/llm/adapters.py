@@ -38,6 +38,17 @@ class OpenAIAdapter(LLMAdapter):
             timeout=60.0,
         )
 
+    def _strip_json(self, content: str) -> str:
+        """Strip markdown code blocks and extract JSON from raw text."""
+        stripped = content.strip()
+        if stripped.startswith("```"):
+            lines = stripped.split("\n")
+            lines = lines[1:]
+            if lines and lines[-1].strip() == "```":
+                lines = lines[:-1]
+            stripped = "\n".join(lines).strip()
+        return stripped
+
     async def generate(
         self,
         prompt: str,
@@ -64,7 +75,9 @@ class OpenAIAdapter(LLMAdapter):
                 if content is None:
                     raise GenerationError("Empty response from OpenAI")
 
-                parsed: dict[str, Any] = json.loads(content)
+                # Strip markdown code blocks if present (e.g. Nous proxy returns ```json ... ```)
+                json_text = self._strip_json(content)
+                parsed: dict[str, Any] = json.loads(json_text)
 
                 # Validate top-level structure (cv + cover_letter keys)
                 ok, msg = _validate_against_schema(parsed, schema)
