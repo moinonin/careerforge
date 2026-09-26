@@ -22,7 +22,8 @@ from uuid import uuid4
 
 from backend.auth.schemas import CurrentUserId
 from backend.config import settings
-from backend.database import get_session, _session_factory
+from backend.database import get_session
+import backend.database as _db_module
 from backend.llm.adapter import GenerationError
 from backend.llm.docx_renderer import CoverLetterDocxRenderer, DocxRenderer
 from backend.llm.prompts import COVER_LETTER_SCHEMA, CV_SCHEMA, assemble_prompt
@@ -126,9 +127,9 @@ async def _run_generation_background(job_id: str, user_id: str):
 
     Creates its own DB session so the request handler is not blocked.
     """
-    if _session_factory is None:
+    if _db_module._session_factory is None:
         return
-    session = _session_factory()
+    session = _db_module._session_factory()
     try:
         async with session as db:
             from backend.models import GenerationJob, MasterProfile, User
@@ -140,9 +141,6 @@ async def _run_generation_background(job_id: str, user_id: str):
             from backend.validators.sanitization import sanitize_text
             from backend.llm.adapter import GenerationError
             from backend.config import settings
-            import structlog, os
-
-            log = structlog.get_logger()
 
             job_result = await db.get(GenerationJob, job_id)
             if job_result is None:
