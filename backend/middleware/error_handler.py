@@ -36,7 +36,12 @@ class ErrorHandlerMiddleware:
                     return
             await send(message)
 
-        await self.app(scope, receive, wrapped_send)
+        try:
+            await self.app(scope, receive, wrapped_send)
+        except Exception as exc:
+            if not _error_sent:
+                _error_sent = True
+                await self._send_error_page(send, 500, "500")
 
     async def _send_error_page(self, send: Send, status_code: int, title: str) -> None:
         """Send a static error HTML page directly as ASGI messages."""
