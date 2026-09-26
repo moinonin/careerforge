@@ -575,11 +575,22 @@ function OverviewTab({ user }: { user: any }) {
         company_name: companyName || undefined,
         output_language: outputLang,
       })
-      const job = await fetchJobStatus(result.job_id)
-      setGenerationResult({
-        at_score: job.at_score,
-        missing_keywords: job.missing_keywords,
-      })
+      // Poll until job completes
+      let job = await fetchJobStatus(result.job_id)
+      let attempts = 0
+      while (job.status === "processing" && attempts < 60) {
+        await new Promise(r => setTimeout(r, 2000))
+        job = await fetchJobStatus(result.job_id)
+        attempts++
+      }
+      if (job.status === "completed") {
+        setGenerationResult({
+          at_score: job.at_score,
+          missing_keywords: job.missing_keywords,
+        })
+      } else {
+        setGenerationResult(null)
+      }
       setJobDesc("")
       setJobTitle("")
       setCompanyName("")
