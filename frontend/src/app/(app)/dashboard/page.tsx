@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { useAuth, useAuthLoading } from "@/lib/auth-context"
 import { getToken } from "@/lib/token-store"
 import { logout, getMe } from "@/lib/auth"
+import { listProfiles } from "@/lib/api/profiles"
 
 const LLM_PROVIDERS = [
   { id: "openai", name: "OpenAI", models: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo"], requiresKey: true },
@@ -117,6 +118,7 @@ async function listLibrary(): Promise<{ documents: LibraryDocument[]; total: num
 }
 
 async function startGeneration(data: {
+  profile_id: string
   job_description: string
   job_title?: string
   company_name?: string
@@ -517,6 +519,9 @@ function OverviewTab({ user }: { user: any }) {
   const [jobTitle, setJobTitle] = useState("")
   const [companyName, setCompanyName] = useState("")
   const [outputLang, setOutputLang] = useState("en")
+  const [profileId, setProfileId] = useState("")
+  const [profiles, setProfiles] = useState<Array<{id: string; title: string}>>([])
+  const [profilesLoading, setProfilesLoading] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [generationResult, setGenerationResult] = useState<{
     at_score: number | null
@@ -536,12 +541,29 @@ function OverviewTab({ user }: { user: any }) {
     load()
   }, [])
 
+  useEffect(() => {
+    async function loadProfiles() {
+      try {
+        setProfilesLoading(true)
+        const data = await listProfiles()
+        setProfiles(data.map((p) => ({ id: p.id, title: p.title })))
+        if (data.length > 0 && !profileId) {
+          setProfileId(data[0].id)
+        }
+      } catch { /* ignore */ } finally {
+        setProfilesLoading(false)
+      }
+    }
+    loadProfiles()
+  }, [])
+
   async function handleGenerate() {
-    if (!jobDesc.trim()) return
+    if (!jobDesc.trim() || !profileId) return
     setGenerating(true)
     setGenerationResult(null)
     try {
       const result = await startGeneration({
+        profile_id: profileId,
         job_description: jobDesc,
         job_title: jobTitle || undefined,
         company_name: companyName || undefined,
@@ -582,6 +604,15 @@ function OverviewTab({ user }: { user: any }) {
             </div>
             <div className="dashboard-form-row">
               <div className="dashboard-form-group">
+                <label htmlFor="gen-profile" className="dashboard-form-label">Source Profile</label>
+                <select id="gen-profile" className="dashboard-form-select"
+                  value={profileId} onChange={e => setProfileId(e.target.value)}>
+                  {profiles.map((p) => (
+                    <option key={p.id} value={p.id}>{p.title}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="dashboard-form-group">
                 <label htmlFor="gen-job-title" className="dashboard-form-label">Job Title</label>
                 <input id="gen-job-title" type="text" className="dashboard-form-input"
                   value={jobTitle} onChange={e => setJobTitle(e.target.value)} placeholder="e.g. Senior Engineer" />
@@ -605,7 +636,7 @@ function OverviewTab({ user }: { user: any }) {
               <button className="dashboard-button dashboard-button-secondary"
                 onClick={() => setShowGenerate(false)}>Cancel</button>
               <button className="dashboard-button dashboard-button-primary"
-                onClick={handleGenerate} disabled={generating || !jobDesc.trim()}>
+                onClick={handleGenerate} disabled={generating || !jobDesc.trim() || !profileId}>
                 {generating ? "Generating..." : "Generate CV"}
               </button>
             </div>
