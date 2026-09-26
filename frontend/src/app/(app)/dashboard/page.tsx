@@ -606,12 +606,21 @@ function OverviewTab({ user }: { user: any }) {
             <div className="dashboard-form-row">
               <div className="dashboard-form-group">
                 <label htmlFor="gen-profile" className="dashboard-form-label">Source Profile</label>
-                <select id="gen-profile" className="dashboard-form-select"
-                  value={profileId} onChange={e => setProfileId(e.target.value)}>
-                  {profiles.map((p) => (
-                    <option key={p.id} value={p.id}>{p.title}</option>
-                  ))}
-                </select>
+                {profiles.length === 0 ? (
+                  <div className="dashboard-empty" style={{ padding: "0.5rem 0" }}>
+                    <p className="text-sm text-[var(--color-text-faint)]">No profiles yet.</p>
+                    <a href="/profiles" className="dashboard-button dashboard-button-sm dashboard-button-primary" style={{ marginTop: "0.5rem" }}>
+                      Create Your First Profile
+                    </a>
+                  </div>
+                ) : (
+                  <select id="gen-profile" className="dashboard-form-select"
+                    value={profileId} onChange={e => setProfileId(e.target.value)}>
+                    {profiles.map((p) => (
+                      <option key={p.id} value={p.id}>{p.title}</option>
+                    ))}
+                  </select>
+                )}
               </div>
               <div className="dashboard-form-group">
                 <label htmlFor="gen-job-title" className="dashboard-form-label">Job Title</label>
