@@ -759,7 +759,7 @@ function DashboardContent() {
   const router = useRouter()
   const { user, loading: authLoading } = useAuth()
   const [loading, setLoading] = useState(false)
-  const [activeTab, setActiveTab] = useState<"overview" | "resumes" | "cover-letters" | "settings">("overview")
+  const [activeTab, setActiveTab] = useState<"overview" | "resumes" | "cover-letters" | "settings" | "profiles">("overview")
 
   // Guard: if auth check fails, kick the user to login.
   useEffect(() => {
@@ -830,6 +830,15 @@ function DashboardContent() {
               <polyline points="10 9 9 9 8 9" />
             </svg>
             Cover Letters
+          </button>
+          <button
+            className={`dashboard-nav-item ${activeTab === "profiles" ? "active" : ""}`}
+            onClick={() => router.push("/profiles")}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="dashboard-nav-icon">
+              <path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+            </svg>
+            Profiles
           </button>
           <button
             className={`dashboard-nav-item ${activeTab === "settings" ? "active" : ""}`}
