@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from starlette.responses import HTMLResponse, JSONResponse
+from starlette.responses import HTMLResponse
 from starlette.types import ASGIApp, Scope, Receive, Send
 
 from backend.config import settings
@@ -23,11 +23,16 @@ class ErrorHandlerMiddleware:
         if scope["path"] not in ("/", "/health", "/ready", "/docs", "/redoc", "/openapi.json"):
             pass  # only handle known routes
 
+        _error_sent = False
+
         async def wrapped_send(message: dict) -> None:
+            nonlocal _error_sent
+            if _error_sent:
+                return
             if message["type"] == "http.response.start":
-                # Check for error status codes
                 status_code = message.get("status", 200)
                 if status_code >= 500:
+                    _error_sent = True
                     await self._send_error_page(scope, receive, send, status_code, "500")
                     return
             await send(message)
