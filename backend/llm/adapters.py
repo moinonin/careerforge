@@ -87,7 +87,13 @@ class OpenAIAdapter(LLMAdapter):
                 # Validate top-level structure (cv + cover_letter keys)
                 ok, msg = _validate_against_schema(parsed, schema)
                 if not ok:
-                    raise ValueError(msg)
+                    # If cover_letter is missing but cv exists, add empty cover_letter
+                    # (Nous proxy sometimes returns only cv)
+                    if "cv" in parsed and "cover_letter" not in parsed:
+                        parsed["cover_letter"] = {}
+                        ok = True
+                    else:
+                        raise ValueError(msg)
 
                 # Validate sub-objects — these failures also trigger retry
                 if cv_sub_schema:
@@ -176,7 +182,13 @@ class LiteLLMAdapter(LLMAdapter):
                 # Validate top-level structure (cv + cover_letter keys)
                 ok, msg = _validate_against_schema(parsed, schema)
                 if not ok:
-                    raise ValueError(msg)
+                    # If cover_letter is missing but cv exists, add empty cover_letter
+                    # (Nous proxy sometimes returns only cv)
+                    if "cv" in parsed and "cover_letter" not in parsed:
+                        parsed["cover_letter"] = {}
+                        ok = True
+                    else:
+                        raise ValueError(msg)
 
                 # Validate sub-objects — these failures also trigger retry
                 if cv_sub_schema:
@@ -284,7 +296,13 @@ class OllamaAdapter(LLMAdapter):
                 # Validate top-level structure (cv + cover_letter keys)
                 ok, msg = _validate_against_schema(parsed, schema)
                 if not ok:
-                    raise ValueError(msg)
+                    # If cover_letter is missing but cv exists, add empty cover_letter
+                    # (Nous proxy sometimes returns only cv)
+                    if "cv" in parsed and "cover_letter" not in parsed:
+                        parsed["cover_letter"] = {}
+                        ok = True
+                    else:
+                        raise ValueError(msg)
 
                 # Validate sub-objects — these failures also trigger retry
                 if cv_sub_schema:
