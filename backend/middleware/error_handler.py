@@ -60,15 +60,18 @@ class ErrorHandlerMiddleware:
             html = f"<html><body><h1>{title}</h1></body></html>"
 
         body = html.encode("utf-8")
-        await send({
-            "type": "http.response.start",
-            "status": status_code,
-            "headers": [
-                (b"content-type", b"text/html; charset=utf-8"),
-                (b"content-length", str(len(body)).encode()),
-            ],
-        })
-        await send({"type": "http.response.body", "body": body})
+        try:
+            await send({
+                "type": "http.response.start",
+                "status": status_code,
+                "headers": [
+                    (b"content-type", b"text/html; charset=utf-8"),
+                    (b"content-length", str(len(body)).encode()),
+                ],
+            })
+            await send({"type": "http.response.body", "body": body})
+        except Exception:
+            pass  # Client disconnected; error page cannot be sent
 
 
 def error_handler_middleware(app: ASGIApp) -> ASGIApp:
