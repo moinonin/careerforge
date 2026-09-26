@@ -331,6 +331,7 @@ export default function ProfilesPage() {
   const [successMsg, setSuccessMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   const searchParams = useSearchParams()
+  const profileIdFromUrl = searchParams.get("profileId")
   const imported = searchParams.get("imported") === "true"
 
   useEffect(() => {
@@ -340,59 +341,22 @@ export default function ProfilesPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  // Pre-fill form with imported CV data when arriving from upload page
+  // Pre-fill form with profile data when arriving from CV import
   useEffect(() => {
-    if (!imported) return
+    if (!profileIdFromUrl) return
     let cancelled = false
-    try {
-      const raw = sessionStorage.getItem("cv_import_data")
-      if (raw) {
-        const importedData = JSON.parse(raw)
-        const skillsStr = (arr: string[]) => (arr && arr.length ? arr.join(", ") : "")
-        setForm(prev => {
-          const imported = importedData as Partial<FormState>
-          const skillsFromImport = imported.skills
-            ? {
-                technical: skillsStr(imported.skills.technical as any),
-                domain: skillsStr(imported.skills.domain as any),
-                tools: skillsStr(imported.skills.tools as any),
-                soft: skillsStr(imported.skills.soft as any),
-              }
-            : null
-          return {
-            ...prev,
-            ...imported,
-            contact: { ...prev.contact, ...(imported.contact || {}) },
-            education: (imported.education || []).map((e: any) => ({
-              ...(e as EducationForm),
-              details: typeof e.details === "string" ? e.details : "",
-            })),
-            experience: (imported.experience || []).map((e: any) => ({
-              ...(e as ExperienceForm),
-              bullets: typeof e.bullets === "string" ? e.bullets : "",
-            })),
-            skills: skillsFromImport || prev.skills,
-            publications: imported.publications || prev.publications,
-            certifications: imported.certifications || prev.certifications,
-            languages: imported.languages || prev.languages,
-            projects: imported.projects || prev.projects,
-          } as FormState
-        })
-        // Create a profile from imported data so the user can edit and save
-        createProfile("Imported CV", importedData)
-          .then(data => {
-            if (!cancelled) {
-              setProfileId(data.id)
-              setProfiles(prev => [data, ...prev])
-            }
-          })
-          .catch(() => {})
-        // Clear sessionStorage so it doesn't re-apply on refresh
-        sessionStorage.removeItem("cv_import_data")
-      }
-    } catch { /* ignore parse errors */ }
+    const fetchAndFill = async () => {
+      try {
+        const detail = await getProfile(profileIdFromUrl)
+        if (cancelled) return
+        const newForm = formFromApi(detail.profile_data)
+        setForm(newForm)
+        setProfileId(profileIdFromUrl)
+      } catch { /* ignore errors */ }
+    }
+    fetchAndFill()
     return () => { cancelled = true }
-  }, [imported])
+  }, [profileIdFromUrl])
 
   const selectProfile = async (id: string) => {
     try {

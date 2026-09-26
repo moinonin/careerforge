@@ -307,7 +307,7 @@ export default function UploadPage() {
               <button
                 onClick={() => {
                   if (profileId) {
-                    router.push(`/profiles/${profileId}`)
+                    router.push(`/profiles?profileId=${profileId}`)
                   } else if (parseJobId) {
                     router.push(`/profiles?imported=true`)
                   }
