@@ -222,7 +222,7 @@ export async function getSkillSuggestions(
 
 export async function importCv(
   file: File,
-): Promise<{ parse_job_id: string; status: string }> {
+): Promise<{ parse_job_id: string; status: string; profile_id?: string }> {
   const form = new FormData();
   form.append("file", file);
   const res = await fetch(`${API_BASE}/profiles/import`, {
