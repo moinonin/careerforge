@@ -32,7 +32,7 @@ class ErrorHandlerMiddleware:
                 status_code = message.get("status", 200)
                 if status_code >= 500:
                     _error_sent = True
-                    await self._send_error_page(wrapped_send, status_code, "500")
+                    await self._send_error_page(send, status_code, "500")
                     return
             await send(message)
 
