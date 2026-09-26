@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useAuth, useAuthLoading } from "@/lib/auth-context"
 import { getToken } from "@/lib/token-store"
 import { logout, getMe } from "@/lib/auth"
@@ -512,6 +512,7 @@ function SettingsTab() {
 }
 
 function OverviewTab({ user }: { user: any }) {
+  const searchParams = useSearchParams()
   const [libraryDocs, setLibraryDocs] = useState<LibraryDocument[]>([])
   const [libraryLoading, setLibraryLoading] = useState(false)
   const [showGenerate, setShowGenerate] = useState(false)
@@ -519,7 +520,7 @@ function OverviewTab({ user }: { user: any }) {
   const [jobTitle, setJobTitle] = useState("")
   const [companyName, setCompanyName] = useState("")
   const [outputLang, setOutputLang] = useState("en")
-  const [profileId, setProfileId] = useState("")
+  const [profileId, setProfileId] = useState(searchParams.get("profileId") ?? "")
   const [profiles, setProfiles] = useState<Array<{id: string; title: string}>>([])
   const [profilesLoading, setProfilesLoading] = useState(false)
   const [generating, setGenerating] = useState(false)
