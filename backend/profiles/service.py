@@ -103,6 +103,7 @@ async def create_profile(
     )
     session.add(profile)
     await session.flush()
+    await session.commit()
     await session.refresh(profile)
     return {
         "id": profile.id,

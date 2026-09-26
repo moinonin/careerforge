@@ -503,6 +503,7 @@ async def stream_generation(
         from backend.models import MasterProfile
         from backend.llm.prompts import assemble_prompt
         from backend.profiles.schemas import MasterProfileData
+        from backend.profiles.service import _load_profile_data
 
         stmt = select(MasterProfile).where(MasterProfile.id == job.profile_id)
         result = await session.execute(stmt)
@@ -511,7 +512,9 @@ async def stream_generation(
             await websocket.send_json({"type": "error", "message": "Profile not found"})
             return
 
-        profile = MasterProfileData(**profile_row.profile_data)
+        profile_data_raw: Any = profile_row.profile_data
+        profile_data: dict[str, Any] = _load_profile_data(profile_data_raw)
+        profile = MasterProfileData(**profile_data)
         prompt = assemble_prompt(
             profile=profile,
             job_description=job.job_description,

@@ -22,6 +22,7 @@ from typing import Any
 from backend.llm.prompts import COVER_LETTER_SCHEMA, CV_SCHEMA, assemble_prompt
 from backend.llm.router import build_adapter
 from backend.models import GenerationJob, MasterProfile, StoredArtifact
+from backend.profiles.service import _load_profile_data
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -96,7 +97,8 @@ async def run_generation(
     if row is None:
         raise ValueError(f"Profile {job.profile_id} not found")
 
-    profile_data: dict[str, Any] = row.profile_data
+    profile_data_raw: Any = row.profile_data
+    profile_data: dict[str, Any] = _load_profile_data(profile_data_raw)
     if not isinstance(profile_data, dict) or not profile_data:
         raise ValueError(f"Profile {job.profile_id} has no profile_data")
 
