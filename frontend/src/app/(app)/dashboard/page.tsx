@@ -543,6 +543,11 @@ function OverviewTab({ user }: { user: any }) {
   }, [])
 
   useEffect(() => {
+    const param = searchParams.get("profileId")
+    if (param && param !== "null") setProfileId(param)
+  }, [searchParams])
+
+  useEffect(() => {
     async function loadProfiles() {
       try {
         setProfilesLoading(true)

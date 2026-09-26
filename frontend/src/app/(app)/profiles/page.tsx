@@ -601,7 +601,7 @@ export default function ProfilesPage() {
                   {saving ? "Saving..." : "Save & Finish"}
                 </button>
                 <button
-                  onClick={() => router.push(`/dashboard?profileId=${profileId}`)}
+                  onClick={() => profileId && router.push(`/dashboard?profileId=${profileId}`)}
                   className="btn btn-secondary btn-sm"
                 >
                   Generate CV
