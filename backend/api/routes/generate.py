@@ -12,6 +12,7 @@ initial release).  Background execution via Celery deferred to Sprint 7.
 
 from __future__ import annotations
 
+import asyncio
 import io
 import os
 import re
@@ -21,7 +22,7 @@ from uuid import uuid4
 
 from backend.auth.schemas import CurrentUserId
 from backend.config import settings
-from backend.database import get_session
+from backend.database import get_session, _session_factory
 from backend.llm.adapter import GenerationError
 from backend.llm.docx_renderer import CoverLetterDocxRenderer, DocxRenderer
 from backend.llm.prompts import COVER_LETTER_SCHEMA, CV_SCHEMA, assemble_prompt
@@ -120,6 +121,120 @@ async def track_usage(
     session.add(metric)
 
 
+async def _run_generation_background(job_id: str, user_id: str):
+    """Background task: run LLM generation, render artifacts, update job status.
+
+    Creates its own DB session so the request handler is not blocked.
+    """
+    if _session_factory is None:
+        return
+    session = _session_factory()
+    try:
+        async with session as db:
+            from backend.models import GenerationJob, MasterProfile, User
+            from backend.llm.service import (
+                run_generation, mark_job_completed, mark_job_failed,
+            )
+            from backend.llm.docx_renderer import CoverLetterDocxRenderer, DocxRenderer
+            from backend.llm.pdf_renderer import await_convert as pdf_convert
+            from backend.validators.sanitization import sanitize_text
+            from backend.llm.adapter import GenerationError
+            from backend.config import settings
+            import structlog, os
+
+            log = structlog.get_logger()
+
+            job_result = await db.get(GenerationJob, job_id)
+            if job_result is None:
+                log.error("background_generation_job_not_found", job_id=job_id)
+                return
+
+            job = job_result
+            profile_id = job.profile_id
+            job_description = job.job_description
+            job_title = job.job_title
+            company_name = job.company_name
+            provider = job.provider
+            model = job.model_name
+            output_language = job.output_language
+
+            # Verify profile still exists
+            profile_stmt = select(MasterProfile).where(
+                MasterProfile.id == profile_id,
+                MasterProfile.user_id == user_id,
+            )
+            profile_result = await db.execute(profile_stmt)
+            profile = profile_result.scalar_one_or_none()
+            if profile is None:
+                await mark_job_failed(db, job.id, "Profile not found or not owned")
+                return
+
+            try:
+                cv, cover_letter = await run_generation(
+                    db, job, provider=provider, model=model,
+                )
+
+                cv_markdown = render_cv_markdown(cv)
+                cl_markdown = render_cover_letter_markdown(cover_letter)
+
+                # Sprint 4: render actual .docx and .pdf files
+                artifacts_dir = settings.generation_artifacts_dir
+                os.makedirs(artifacts_dir, exist_ok=True)
+                cv_docx_path = os.path.join(artifacts_dir, f"{job.id}_cv.docx")
+                cl_docx_path = os.path.join(artifacts_dir, f"{job.id}_cover_letter.docx")
+                cv_pdf_path = os.path.join(artifacts_dir, f"{job.id}_cv.pdf")
+                cl_pdf_path = os.path.join(artifacts_dir, f"{job.id}_cover_letter.pdf")
+
+                DocxRenderer().render(cv).save(cv_docx_path)
+                CoverLetterDocxRenderer().render(cover_letter).save(cl_docx_path)
+                await pdf_convert(cv_docx_path, artifacts_dir)
+                await pdf_convert(cl_docx_path, artifacts_dir)
+
+                at_score, missing_keywords = _compute_at_score(cv, str(job_description))
+
+                await mark_job_completed(
+                    db, job.id,
+                    cv_json=cv, cover_letter_json=cover_letter,
+                    at_score=at_score,
+                    cv_docx_path=cv_docx_path,
+                    cl_docx_path=cl_docx_path,
+                    cv_pdf_path=cv_pdf_path,
+                    cl_pdf_path=cl_pdf_path,
+                    user_id=user_id,
+                )
+
+                # Track usage
+                user_stmt = select(User).where(User.id == user_id)
+                user_result = await db.execute(user_stmt)
+                user = user_result.scalar_one_or_none()
+                org_id = getattr(user, "organization_id", None) if user else None
+                await track_usage(
+                    db, organization_id=org_id or "",
+                    user_id=user_id,
+                    generation_job_id=job.id,
+                    provider=job.provider or "system_default",
+                    model_name=job.model_name or "unknown",
+                    output_language=output_language,
+                    export_format="both",
+                    at_score=at_score,
+                    tokens_used=job.tokens_used,
+                )
+
+                log.info("generation_completed_background", job_id=job.id)
+
+            except GenerationError as exc:
+                await mark_job_failed(db, job.id, str(exc))
+                log.error("generation_failed_background", job_id=job.id, error=str(exc))
+            except ValueError as exc:
+                await mark_job_failed(db, job.id, str(exc))
+                log.error("generation_invalid_background", job_id=job.id, error=str(exc))
+            except Exception as exc:
+                await mark_job_failed(db, job.id, str(exc))
+                log.error("generation_error_background", job_id=job.id, error=str(exc))
+    finally:
+        await session.close()
+
+
 @router.post("", status_code=status.HTTP_202_ACCEPTED)
 async def start_generation(
     request: dict[str, Any],
@@ -142,15 +257,11 @@ async def start_generation(
     Returns::
         {
             "job_id": "<uuid>",
-            "status": "completed",
-            "message": "Generation completed",
-            "cv_markdown": "...",
-            "cover_letter_markdown": "..."
+            "status": "processing",
+            "message": "Generation started"
         }
 
-    The job runs inline (Sprint 3). On completion the ``cv_docx_url`` and
-    ``cl_docx_url`` fields on the job point to the rendered artifacts.
-    On failure the status is ``"failed"`` with an ``error_message``.
+    Poll GET /api/v1/generate/jobs/{job_id} for completion.
     """
     profile_id = request.get("profile_id")
     job_description = request.get("job_description")
@@ -208,87 +319,16 @@ async def start_generation(
         model=model,
     )
 
-    # Mark processing and execute inline
+    # Mark processing and start background generation
     await mark_job_processing(session, job.id)
+    # Start background task so the request is not blocked
+    asyncio.create_task(_run_generation_background(job.id, current_user_id))
 
-    try:
-        cv, cover_letter = await run_generation(
-            session, job, provider=provider, model=model,
-            jev_context=jev_analysis,
-        )
-
-        cv_markdown = render_cv_markdown(cv)
-        cl_markdown = render_cover_letter_markdown(cover_letter)
-
-        # Sprint 4: render actual .docx and .pdf files in addition to markdown
-        from backend.llm.pdf_renderer import await_convert as pdf_convert
-        artifacts_dir = settings.generation_artifacts_dir
-        os.makedirs(artifacts_dir, exist_ok=True)
-        cv_docx_path = os.path.join(artifacts_dir, f"{job.id}_cv.docx")
-        cl_docx_path = os.path.join(artifacts_dir, f"{job.id}_cover_letter.docx")
-        cv_pdf_path = os.path.join(artifacts_dir, f"{job.id}_cv.pdf")
-        cl_pdf_path = os.path.join(artifacts_dir, f"{job.id}_cover_letter.pdf")
-
-        DocxRenderer().render(cv).save(cv_docx_path)
-        CoverLetterDocxRenderer().render(cover_letter).save(cl_docx_path)
-
-        # Convert DOCX → PDF
-        await pdf_convert(cv_docx_path, artifacts_dir)
-        await pdf_convert(cl_docx_path, artifacts_dir)
-
-        at_score, missing_keywords = _compute_at_score(cv, str(job_description))
-
-        await mark_job_completed(
-            session,
-            job.id,
-            cv_json=cv,
-            cover_letter_json=cover_letter,
-            at_score=at_score,
-            cv_docx_path=cv_docx_path,
-            cl_docx_path=cl_docx_path,
-            cv_pdf_path=cv_pdf_path,
-            cl_pdf_path=cl_pdf_path,
-            user_id=current_user_id,
-        )
-
-        # Track usage for Sprint 10 feature analytics
-        from backend.models import User
-        stmt = select(User).where(User.id == current_user_id)
-        result = await session.execute(stmt)
-        user = result.scalar_one_or_none()
-        org_id = user.organization_id if user else None
-        await track_usage(
-            session,
-            organization_id=org_id or "",
-            user_id=current_user_id,
-            generation_job_id=job.id,
-            provider=job.provider or "system_default",
-            model_name=job.model_name or "unknown",
-            output_language=output_language,
-            export_format="both",
-            at_score=at_score,
-            tokens_used=job.tokens_used,
-        )
-
-        return {
-            "job_id": job.id,
-            "status": "completed",
-            "message": "Generation completed",
-            "cv_markdown": cv_markdown,
-            "cover_letter_markdown": cl_markdown,
-            "at_score": at_score,
-            "missing_keywords": missing_keywords,
-        }
-
-    except GenerationError as exc:
-        await mark_job_failed(session, job.id, str(exc))
-        raise HTTPException(status_code=502, detail=f"LLM generation failed: {exc}") from exc
-    except ValueError as exc:
-        await mark_job_failed(session, job.id, str(exc))
-        raise HTTPException(status_code=400, detail=f"Invalid request: {exc}") from exc
-    except Exception as exc:
-        await mark_job_failed(session, job.id, str(exc))
-        raise HTTPException(status_code=500, detail=f"Generation failed: {exc}") from exc
+    return {
+        "job_id": job.id,
+        "status": "processing",
+        "message": "Generation started",
+    }
 
 
 def _compute_at_score(cv: dict[str, Any], job_description: str) -> tuple[int, list[str]]:
