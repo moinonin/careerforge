@@ -187,7 +187,8 @@ async def import_cv(
             "status": "failed",
             "message": f"Parse failed: {e}",
         }
-    return {"parse_job_id": parse_job_id, "status": "completed"}
+        return {"parse_job_id": parse_job_id, "status": "failed", "message": str(e)}
+    return {"parse_job_id": parse_job_id, "status": "completed", "profile_id": created["id"]}
 
 
 @router.get("/import/{parse_job_id}", response_model=dict)
