@@ -1,8 +1,8 @@
-"""Generate sample CVs directly from parsed profile data (no LLM).
+"""Generate sample CVs using pymupdf + Jev for parsing and Nous LLM for enrichment.
 
 Flow:
 1. Parse reference CV with pymupdf + Jev → MasterProfileData
-2. Enrich with role-specific additions
+2. Enrich with role-specific additions via Nous LLM (ling-3.0-flash-fin:free)
 3. Render to DOCX + PDF using DocxRenderer/PDFRenderer
 
 Usage:
@@ -13,30 +13,53 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from openai import AsyncOpenAI
 from backend.llm.docx_renderer import DocxRenderer
 from backend.llm.pdf_renderer import PDFRenderer
 from backend.profiles.jev_parser import parse_cv_with_jev
 
 ARTIFACTS = Path(__file__).resolve().parent / "artifacts"
+NOUS_BASE_URL = os.environ.get("NOUS_BASE_URL", "http://localhost:8645/v1")
+NOUS_MODEL = os.environ.get("NOUS_MODEL", "inclusionai/ling-3.0-flash-fin:free")
+
+ROLE_BULLETS = {
+    "ML Engineer": [
+        "Designed ML pipelines processing 10M+ predictions daily",
+        "Reduced inference latency by 40% through optimization",
+        "Implemented A/B testing improving accuracy by 15%",
+    ],
+    "Quantitative Researcher": [
+        "Developed strategies generating 2.3x Sharpe ratio over 12-month backtest",
+        "Built predictive models on 500GB+ datasets reducing latency by 60%",
+        "Deployed 12+ strategies across 5 asset classes",
+    ],
+    "Senior Backend Engineer": [
+        "Architected microservices handling 50K+ RPS with <10ms p99 latency",
+        "Reduced infrastructure costs by 35% through auto-scaling",
+        "Led migration to Kubernetes across 8 services",
+    ],
+}
 
 
-async def generate_cv(
-    job_title: str,
-    company_name: str,
-    job_description: str,
-    output_prefix: str,
-) -> dict | None:
+async def generate_cv(job_title, company_name, job_description, output_prefix):
     ref_cv_path = ARTIFACTS / "nicolus-rotich-oxford-cv.pdf"
     with open(ref_cv_path, "rb") as f:
         ref_bytes = f.read()
 
     profile = await parse_cv_with_jev(ref_bytes, "nicolus-rotich-oxford-cv.pdf")
     cv_dict = _profile_to_dict(profile, job_title, company_name, job_description)
+
+    # Enrich with Nous LLM
+    try:
+        cv_dict = await _enrich_with_llm(cv_dict, job_description, job_title)
+    except Exception as exc:
+        print(f"  ⚠ LLM enrichment failed: {exc}, using base CV")
 
     docx_path = ARTIFACTS / f"{output_prefix}.docx"
     renderer = DocxRenderer()
@@ -54,6 +77,51 @@ async def generate_cv(
     return {"prefix": output_prefix, "pdf": str(pdf_path), "docx": str(docx_path)}
 
 
+async def _enrich_with_llm(cv_dict, job_description, job_title):
+    client = AsyncOpenAI(base_url=NOUS_BASE_URL, api_key="test", timeout=120.0)
+
+    prompt = (
+        "You are a CV enhancement assistant. Given the following CV data and job description, "
+        "improve the CV content for this specific role.\n\n"
+        f"JOB DESCRIPTION: {job_description}\n\n"
+        f"CURRENT CV DATA: {json.dumps(cv_dict, indent=2)}\n\n"
+        "TASK: Return ONLY valid JSON with these exact fields, no markdown:\n"
+        '{"summary": "A compelling 3-4 sentence professional summary tailored to the role", '
+        '"experience": [{"role": "...", "company": "...", '
+        '"bullets": ["3 quantified achievement bullets tailored to the role"]}], '
+        '"skills": {"technical": ["3 relevant technical skills"], "domain": ["2 domain skills"], '
+        '"tools": ["3 tools/frameworks"], "soft": ["2 soft skills"]}, '
+        '"cover_letter_summary": "1-2 sentence cover letter hook"}\n\n'
+        "Rules:\n"
+        f"- Use the candidate's actual background (chemical engineering, ML, quant research)\n"
+        f"- Reframe experience to highlight transferable skills for {job_title}\n"
+        "- All bullets must be quantified or specific\n"
+        "- Return valid JSON only, no markdown, no explanation"
+    )
+
+    response = await client.chat.completions.create(
+        model=NOUS_MODEL,
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=500,
+        temperature=0.1,
+        reasoning_effort="none",
+    )
+    content = response.choices[0].message.content
+    if not content:
+        raise ValueError("Empty LLM response")
+    parsed = json.loads(content)
+
+    # Merge LLM output into cv_dict
+    if "summary" in parsed:
+        cv_dict["summary"] = parsed["summary"]
+    if "experience" in parsed and parsed["experience"]:
+        cv_dict["experience"] = parsed["experience"]
+    if "skills" in parsed:
+        cv_dict["skills"] = parsed["skills"]
+
+    return cv_dict
+
+
 def _profile_to_dict(profile, job_title, company_name, job_description):
     contact = profile.contact.model_dump() if hasattr(profile.contact, "model_dump") else profile.contact
     skills = profile.skills.model_dump() if hasattr(profile.skills, "model_dump") else profile.skills
@@ -66,7 +134,10 @@ def _profile_to_dict(profile, job_title, company_name, job_description):
             "location": exp.location or "",
             "start_date": exp.start_date or "",
             "end_date": exp.end_date or "",
-            "bullets": _bullets(job_title),
+            "bullets": ROLE_BULLETS.get(job_title, [
+                "Demonstrated expertise with measurable impact on business metrics",
+                "Collaborated cross-functionally to deliver high-quality solutions",
+            ]),
         })
 
     education = []
@@ -108,14 +179,6 @@ def _profile_to_dict(profile, job_title, company_name, job_description):
         "projects": projects,
         "additional_info": profile.additional_info or "",
     }
-
-
-def _bullets(job_title):
-    return {
-        "ML Engineer": ["Designed ML pipelines processing 10M+ predictions daily", "Reduced inference latency by 40% through optimization", "Implemented A/B testing improving accuracy by 15%"],
-        "Quantitative Researcher": ["Developed strategies generating 2.3x Sharpe ratio over 12-month backtest", "Built predictive models on 500GB+ datasets reducing latency by 60%", "Deployed 12+ strategies across 5 asset classes"],
-        "Senior Backend Engineer": ["Architected microservices handling 50K+ RPS with <10ms p99 latency", "Reduced infrastructure costs by 35% through auto-scaling", "Led migration to Kubernetes across 8 services"],
-    }.get(job_title, ["Demonstrated expertise with measurable impact on business metrics", "Collaborated cross-functionally to deliver high-quality solutions"])
 
 
 async def main():
