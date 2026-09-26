@@ -123,6 +123,8 @@ async function startGeneration(data: {
   job_title?: string
   company_name?: string
   output_language?: string
+  provider?: string
+  model?: string
 }): Promise<{ job_id: string; status: string }> {
   const headers = await getAuthHeaders()
   return apiRequest<{ job_id: string; status: string }>("/generate", {
@@ -525,8 +527,13 @@ function OverviewTab({ user }: { user: any }) {
   const [profilesLoading, setProfilesLoading] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [generationResult, setGenerationResult] = useState<{
-    at_score: number | null
-    missing_keywords: string[] | null
+    at_score?: number | null
+    missing_keywords?: string[] | null
+    cv_docx_url?: string
+    cv_pdf_url?: string
+    cl_docx_url?: string
+    cl_pdf_url?: string
+    error?: string | any
   } | null>(null)
 
   useEffect(() => {
@@ -574,6 +581,8 @@ function OverviewTab({ user }: { user: any }) {
         job_title: jobTitle || undefined,
         company_name: companyName || undefined,
         output_language: outputLang,
+        provider: "nous",
+        model: "inclusionai/ling-3.0-flash-fin:free",
       })
       // Poll until job completes
       let job = await fetchJobStatus(result.job_id)
@@ -587,9 +596,13 @@ function OverviewTab({ user }: { user: any }) {
         setGenerationResult({
           at_score: job.at_score,
           missing_keywords: job.missing_keywords,
+          cv_docx_url: job.cv_docx_url,
+          cv_pdf_url: job.cv_pdf_url,
+          cl_docx_url: job.cl_docx_url,
+          cl_pdf_url: job.cl_pdf_url,
         })
       } else {
-        setGenerationResult(null)
+        setGenerationResult({ error: job.error_message || "Generation failed" })
       }
       setJobDesc("")
       setJobTitle("")
@@ -690,6 +703,27 @@ function OverviewTab({ user }: { user: any }) {
               <span className="dashboard-at-score-missing">
                 {generationResult.missing_keywords.length} keywords missing: {generationResult.missing_keywords.join(", ")}
               </span>
+            )}
+          </div>
+        )}
+        {generationResult?.error && (
+          <div className="dashboard-generation-error">
+            <p>Generation failed: {generationResult.error}</p>
+            <p className="dashboard-hint">The CV was not saved. Please try again or adjust the job description.</p>
+          </div>
+        )}
+        {generationResult && !generationResult.error && (generationResult.cv_docx_url || generationResult.cl_docx_url) && (
+          <div className="dashboard-generation-success">
+            <p>✓ CV generated successfully! Your files are saved in the library.</p>
+            {generationResult.cv_pdf_url && (
+              <a href={generationResult.cv_pdf_url} className="dashboard-button dashboard-button-sm dashboard-button-secondary" target="_blank" rel="noopener noreferrer">
+                Download CV (PDF)
+              </a>
+            )}
+            {generationResult.cl_pdf_url && (
+              <a href={generationResult.cl_pdf_url} className="dashboard-button dashboard-button-sm dashboard-button-secondary" target="_blank" rel="noopener noreferrer">
+                Download Cover Letter (PDF)
+              </a>
             )}
           </div>
         )}
