@@ -23,9 +23,10 @@ from backend.llm.adapter import (
 # OpenAI
 # ═══════════════════════════════════════════════════════════════════════════════
 
+@register_adapter("nous")
 @register_adapter("openai")
 class OpenAIAdapter(LLMAdapter):
-    """Calls OpenAI Chat Completions with ``response_format=json_object``."""
+    """Calls OpenAI-compatible Chat Completions (OpenAI, Nous proxy)."""
 
     def __init__(self, api_key: str | None = None, base_url: str | None = None):
         super().__init__(api_key=api_key, base_url=base_url)
@@ -57,7 +58,6 @@ class OpenAIAdapter(LLMAdapter):
                 response = await self._client.chat.completions.create(
                     model=target_model,
                     messages=[{"role": "user", "content": prompt}],
-                    response_format={"type": "json_object"},
                     temperature=0.0,
                 )
                 content = response.choices[0].message.content
