@@ -8,7 +8,7 @@ from backend.auth.schemas import CurrentUserId
 from backend.database import get_session
 from backend.profiles import schemas as profiles_schemas
 from backend.profiles import service as profiles_service
-from backend.profiles.cv_parser import parse_cv
+from backend.profiles.jev_parser import parse_cv_with_jev
 
 router = APIRouter(tags=["profiles"])
 
@@ -140,23 +140,47 @@ class ProfileImportRequest(BaseModel):
     pass  # file is uploaded as multipart form data
 
 
-@router.post("/import", status_code=status.HTTP_202_ACCEPTED, response_model=dict)
+@router.post("/import", status_code=status.HTTP_201_CREATED, response_model=dict)
 async def import_cv(
     current_user_id: CurrentUserId,
     file: UploadFile = File(...),  # noqa: B008
     session: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> dict:
-    """Trigger CV file import. Accepts a PDF or DOCX file as multipart upload."""
+    """Import a CV file and create a profile automatically.
+
+    Accepts a PDF or DOCX file as multipart upload. Parses with pymupdf + Jev,
+    then creates the profile in the database.
+    """
     import uuid
+    from backend.profiles.schemas import MasterProfileData
     parse_job_id = str(uuid.uuid4())
-    # Parse immediately using the CV parser
     file_bytes = await file.read()
     try:
-        parsed = parse_cv(file_bytes, file.filename or "")
+        profile = await parse_cv_with_jev(file_bytes, file.filename or "")
+        profile_dict = profile.model_dump()
+        # Clean up the contact name (pymupdf sometimes appends document metadata)
+        contact = profile_dict.get("contact", {})
+        if isinstance(contact, dict):
+            name = contact.get("full_name", "")
+            # Strip document metadata suffixes: split on | then on ·
+            for sep in ("|", "·"):
+                while sep in name:
+                    name = name.split(sep)[0].strip()
+            contact["full_name"] = name
+            profile_dict["contact"] = contact
+
+        # Auto-create the profile
+        from backend.profiles.service import create_profile
+        create_req = profiles_schemas.ProfileCreateRequest(
+            title=f"Imported CV — {profile_dict['contact'].get('full_name', 'Unknown')}",
+            profile_data=MasterProfileData(**profile_dict),
+        )
+        created = await create_profile(session, current_user_id, create_req)
+
         _parse_jobs[parse_job_id] = {
             "status": "completed",
-            "profile_data": parsed.model_dump(),
-            "confidence_flags": parsed.confidence_flags,
+            "profile_data": created["profile_data"],
+            "profile_id": created["id"],
         }
     except Exception as e:
         _parse_jobs[parse_job_id] = {

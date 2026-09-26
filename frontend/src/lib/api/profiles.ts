@@ -245,6 +245,7 @@ export async function getImportStatus(parseJobId: string): Promise<{
   status: string;
   message?: string;
   profile_data?: MasterProfileData;
+  profile_id?: string;
   confidence_flags?: Record<string, string>;
   missing_sections?: string[];
 }> {

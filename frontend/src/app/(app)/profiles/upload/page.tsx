@@ -18,10 +18,10 @@ export default function UploadPage() {
   const { user, loading: authLoading } = useAuth()
   const [status, setStatus] = useState<Status>("idle")
   const [parseJobId, setParseJobId] = useState<string | null>(null)
+  const [profileId, setProfileId] = useState<string | null>(null)
   const [progress, setProgress] = useState<number>(0)
   const [message, setMessage] = useState<string | null>(null)
   const [profileData, setProfileData] = useState<any>(null)
-  const [confidenceFlags, setConfidenceFlags] = useState<Record<string, string> | null>(null)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -40,7 +40,6 @@ export default function UploadPage() {
     setStatus("uploading")
     setProgress(0)
     setProfileData(null)
-    setConfidenceFlags(null)
     setParseJobId(null)
   }, [])
 
@@ -70,7 +69,7 @@ export default function UploadPage() {
           setStatus("done")
           setProgress(100)
           setProfileData(s.profile_data ?? null)
-          setConfidenceFlags(s.confidence_flags ?? null)
+          if (s.profile_id) setProfileId(s.profile_id)
           return
         }
         if (s.status === "failed") {
@@ -295,57 +294,34 @@ export default function UploadPage() {
                 <polyline points="20,6 9,17 4,12" />
               </svg>
               <span className="text-sm font-medium text-emerald-400">
-                CV parsed successfully
+                CV imported successfully
               </span>
             </div>
 
-            {confidenceFlags && Object.keys(confidenceFlags).length > 0 && (
-              <div className="mb-4">
-                <p className="text-xs text-[var(--color-text-faint)] mb-2">Confidence flags:</p>
-                <ul className="space-y-1">
-                  {Object.entries(confidenceFlags).map(([section, flag]) => (
-                    <li
-                      key={section}
-                      className="text-xs text-amber-400/80 flex items-center gap-2"
-                    >
-                      <svg
-                        className="w-3 h-3 shrink-0"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth={2}
-                      >
-                        <path d="M12 9v4" />
-                        <path d="M12 17h.01" />
-                      </svg>
-                      <span className="capitalize">{section}:</span>{" "}
-                      {flag}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+            <p className="text-xs text-[var(--color-text-faint)] mb-4">
+              Your profile has been created from the uploaded CV.
+              You&apos;re taken directly to your profile editor.
+            </p>
 
             <div className="flex flex-col sm:flex-row items-center gap-3 mt-4">
               <button
                 onClick={() => {
-                  if (profileData) {
-                    try {
-                      sessionStorage.setItem("cv_import_data", JSON.stringify(profileData))
-                    } catch { /* ignore storage errors */ }
+                  if (profileId) {
+                    router.push(`/profiles/${profileId}`)
+                  } else if (parseJobId) {
+                    router.push(`/profiles?imported=true`)
                   }
-                  router.push("/profiles?imported=true")
                 }}
                 className="w-full sm:w-auto px-5 py-2.5 rounded-lg bg-[rgba(0,0,0,0.08)] hover:bg-[rgba(0,0,0,0.12)] text-sm font-medium text-[var(--color-text)] transition-colors"
               >
-                Review in wizard
+                View profile
               </button>
               <button
                 onClick={() => {
                   setStatus("idle")
                   setProgress(0)
                   setProfileData(null)
-                  setConfidenceFlags(null)
+                  setProfileId(null)
                   setParseJobId(null)
                   setSelectedFile(null)
                   setMessage(null)
@@ -385,7 +361,7 @@ export default function UploadPage() {
                 setProgress(0)
                 setMessage(null)
                 setProfileData(null)
-                setConfidenceFlags(null)
+                setProfileId(null)
                 setParseJobId(null)
                 setSelectedFile(null)
                 if (fileInputRef.current) fileInputRef.current.value = ""
