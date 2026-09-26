@@ -162,22 +162,22 @@ function formFromApi(data: MasterProfileData | ProfileDetail["profile_data"]): F
 function formToApi(form: FormState): MasterProfileData {
   return {
     contact: {
-      full_name: form.contact.full_name || null,
-      location: form.contact.location || null,
+      full_name: form.contact.full_name || "",
+      location: form.contact.location || "",
       phone: form.contact.phone || null,
       email: form.contact.email || null,
       linkedin: form.contact.linkedin || null,
       website_portfolio: form.contact.website_portfolio || null,
     },
-    summary: form.summary || null,
+    summary: form.summary || "",
     education: form.education
       .filter((e) => e.degree || e.institution)
       .map((e) => ({
-        degree: e.degree || null,
-        institution: e.institution || null,
+        degree: e.degree || "",
+        institution: e.institution || "",
         location: e.location || null,
-        start_date: e.start_date || null,
-        end_date: e.end_date || null,
+        start_date: e.start_date || "",
+        end_date: e.end_date || "",
         thesis: e.thesis || null,
         details: e.details
           ? e.details.split(",").map((s) => s.trim()).filter(Boolean)
@@ -186,11 +186,11 @@ function formToApi(form: FormState): MasterProfileData {
     experience: form.experience
       .filter((e) => e.role || e.company)
       .map((e) => ({
-        role: e.role || null,
-        company: e.company || null,
+        role: e.role || "",
+        company: e.company || "",
         location: e.location || null,
-        start_date: e.start_date || null,
-        end_date: e.end_date || null,
+        start_date: e.start_date || "",
+        end_date: e.end_date || "",
         bullets: e.bullets
           ? e.bullets.split("\n").map((s) => s.trim()).filter(Boolean)
           : [],
@@ -212,7 +212,7 @@ function formToApi(form: FormState): MasterProfileData {
     publications: form.publications
       .filter((p) => p.citation)
       .map((p) => ({
-        citation: p.citation || null,
+        citation: p.citation || "",
         year: p.year ? parseInt(p.year, 10) : null,
         doi: p.doi || null,
         link: p.link || null,
@@ -220,27 +220,27 @@ function formToApi(form: FormState): MasterProfileData {
     certifications: form.certifications
       .filter((c) => c.name)
       .map((c) => ({
-        name: c.name || null,
-        issuer: c.issuer || null,
+        name: c.name || "",
+        issuer: c.issuer || "",
         year: c.year ? parseInt(c.year, 10) : null,
       })),
     languages: form.languages
       .filter((l) => l.language)
       .map((l) => ({
-        language: l.language || null,
-        proficiency: l.proficiency || null,
+        language: l.language || "",
+        proficiency: l.proficiency || "",
       })),
     projects: form.projects
       .filter((p) => p.name || p.description)
       .map((p) => ({
-        name: p.name || null,
-        description: p.description || null,
+        name: p.name || "",
+        description: p.description || "",
         tech_stack: p.tech_stack
           ? p.tech_stack.split(",").map((s) => s.trim()).filter(Boolean)
-          : null,
+          : [],
         link: p.link || null,
       })),
-    additional_info: form.additional_info || null,
+    additional_info: form.additional_info || "",
   };
 }
 
