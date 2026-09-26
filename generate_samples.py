@@ -148,8 +148,8 @@ async def main():
 
     print(f"\nDone: {len(results)}/{count} CVs in {ARTIFACTS}/")
     for r in results:
-        print(f"  {r['pdf'].name}")
-        print(f"  {r['docx'].name}")
+        print(f"  {Path(r['pdf']).name}")
+        print(f"  {Path(r['docx']).name}")
 
 
 if __name__ == "__main__":
