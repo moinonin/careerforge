@@ -583,6 +583,11 @@ function OverviewTab({ user }: { user: any }) {
       setJobDesc("")
       setJobTitle("")
       setCompanyName("")
+      // Refresh the library so the generated CV appears in the Resumes tab
+      try {
+        const lib = await listLibrary()
+        setLibraryDocs(lib.documents.slice(0, 5))
+      } catch { /* ignore */ }
     } catch { /* ignore */ } finally {
       setGenerating(false)
     }
