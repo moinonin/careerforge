@@ -42,7 +42,8 @@ async function _request<T>(
   };
 
   if (!res.ok) {
-    const msg = data.error ?? data.detail ?? `HTTP ${res.status}`;
+    const rawMsg = data.error ?? data.detail ?? `HTTP ${res.status}`;
+    const msg = Array.isArray(rawMsg) ? rawMsg.map((e: any) => e.msg ?? e).join("; ") : rawMsg;
     throw new Error(msg);
   }
 
@@ -234,7 +235,8 @@ export async function importCv(
   });
   const data = await res.json();
   if (!res.ok) {
-    const msg = (data.error ?? data.detail ?? `HTTP ${res.status}`) as string;
+    const rawMsg = (data.error ?? data.detail ?? `HTTP ${res.status}`);
+    const msg = Array.isArray(rawMsg) ? rawMsg.map((e: any) => e.msg ?? e).join("; ") : (rawMsg as string);
     throw new Error(msg);
   }
   return data.data ?? data as any;

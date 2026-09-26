@@ -181,7 +181,7 @@ function formToApi(form: FormState): MasterProfileData {
         thesis: e.thesis || null,
         details: e.details
           ? e.details.split(",").map((s) => s.trim()).filter(Boolean)
-          : null,
+          : [],
       })),
     experience: form.experience
       .filter((e) => e.role || e.company)
@@ -193,21 +193,21 @@ function formToApi(form: FormState): MasterProfileData {
         end_date: e.end_date || null,
         bullets: e.bullets
           ? e.bullets.split("\n").map((s) => s.trim()).filter(Boolean)
-          : null,
+          : [],
       })),
     skills: {
       technical: form.skills.technical
         ? form.skills.technical.split(",").map((s) => s.trim()).filter(Boolean)
-        : null,
+        : [],
       domain: form.skills.domain
         ? form.skills.domain.split(",").map((s) => s.trim()).filter(Boolean)
-        : null,
+        : [],
       tools: form.skills.tools
         ? form.skills.tools.split(",").map((s) => s.trim()).filter(Boolean)
-        : null,
+        : [],
       soft: form.skills.soft
         ? form.skills.soft.split(",").map((s) => s.trim()).filter(Boolean)
-        : null,
+        : [],
     },
     publications: form.publications
       .filter((p) => p.citation)
