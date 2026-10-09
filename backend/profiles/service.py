@@ -29,19 +29,21 @@ async def list_profiles(
     out: list[dict[str, Any]] = []
     for p in profiles:
         pd = _load_profile_data(p.profile_data)
-        out.append({
-            "id": p.id,
-            "title": p.title,
-            "profile_data": pd,
-            "master_prompt_text": p.master_prompt_text,
-            "is_default": p.is_default,
-            "is_draft": p.is_draft,
-            "created_at": p.created_at.isoformat() if p.created_at else None,
-            "updated_at": p.updated_at.isoformat() if p.updated_at else None,
-            "completeness_score": schemas.compute_completeness(
-                schemas.MasterProfileData.model_validate(pd)
-            ),
-        })
+        out.append(
+            {
+                "id": p.id,
+                "title": p.title,
+                "profile_data": pd,
+                "master_prompt_text": p.master_prompt_text,
+                "is_default": p.is_default,
+                "is_draft": p.is_draft,
+                "created_at": p.created_at.isoformat() if p.created_at else None,
+                "updated_at": p.updated_at.isoformat() if p.updated_at else None,
+                "completeness_score": schemas.compute_completeness(
+                    schemas.MasterProfileData.model_validate(pd)
+                ),
+            }
+        )
     return out
 
 
@@ -82,7 +84,9 @@ async def get_profile(
             "id": profile.owner.id,
             "email": profile.owner.email,
             "full_name": profile.owner.full_name,
-        } if profile.owner else None,
+        }
+        if profile.owner
+        else None,
     }
 
 

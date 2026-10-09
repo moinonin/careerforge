@@ -10,27 +10,25 @@ from __future__ import annotations
 
 import time
 import uuid
-from typing import Callable
 
-from redis.asyncio import Redis
-from starlette.types import ASGIApp, Scope, Receive, Send
-
-from backend.config import settings
 from backend.auth.jwt_utils import get_user_id_from_token
+from backend.config import settings
+from redis.asyncio import Redis
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 # ── Rate limit configuration ────────────────────────────────────────────
 
 TIER_LIMITS = {
     "trial": {
-        "generate": {"requests": 1, "window": 30},      # 1 per 30s
-        "auth": {"requests": 5, "window": 3600},        # 5 per hour
+        "generate": {"requests": 1, "window": 30},  # 1 per 30s
+        "auth": {"requests": 5, "window": 3600},  # 5 per hour
     },
     "paid": {
-        "generate": {"requests": 60, "window": 60},     # 60 per minute
-        "auth": {"requests": 20, "window": 3600},       # 20 per hour
+        "generate": {"requests": 60, "window": 60},  # 60 per minute
+        "auth": {"requests": 20, "window": 3600},  # 20 per hour
     },
     "free": {
-        "generate": {"requests": 1, "window": 60},      # fallback
+        "generate": {"requests": 1, "window": 60},  # fallback
         "auth": {"requests": 5, "window": 3600},
     },
 }
@@ -149,6 +147,7 @@ class RateLimitMiddleware:
 
         if not allowed:
             from starlette.responses import JSONResponse
+
             response = JSONResponse(
                 status_code=429,
                 content={

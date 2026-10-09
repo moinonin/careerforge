@@ -1,15 +1,15 @@
 """CV parser tests."""
 
 import pytest
-
 from backend.profiles.cv_parser import parse_cv
 
 
 @pytest.fixture
 def sample_cv_docx() -> bytes:
     """Create a minimal DOCX with sample CV content."""
-    from docx import Document
     import io
+
+    from docx import Document
 
     doc = Document()
     doc.add_paragraph("Jane Developer")
@@ -52,8 +52,9 @@ def test_parse_docx_returns_confidence_flags(sample_cv_docx: bytes) -> None:
 
 def test_parse_returns_status_completed_for_docx() -> None:
     """DOCX parsing returns completed status."""
-    from backend.profiles.cv_parser import _ParsedSection
     import io
+
+    from backend.profiles.cv_parser import _ParsedSection
     from docx import Document
 
     doc = Document()

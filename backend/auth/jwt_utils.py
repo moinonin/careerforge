@@ -29,6 +29,7 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 # ── JWT helpers ──────────────────────────────────────────────────────────────
 
+
 def create_access_token(user_id: str, email: str) -> str:
     """Short-lived JWT access token."""
     now = datetime.now(UTC)
@@ -62,6 +63,18 @@ def create_reset_token(user_id: str) -> str:
         "type": "reset",
         "iat": now,
         "exp": now + timedelta(hours=1),
+    }
+    return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)  # type: ignore[no-any-return]
+
+
+def create_verify_token(user_id: str) -> str:
+    """Email-verification token (JWT with type='verify', 24h expiry)."""
+    now = datetime.now(UTC)
+    payload = {
+        "sub": user_id,
+        "type": "verify",
+        "iat": now,
+        "exp": now + timedelta(hours=24),
     }
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)  # type: ignore[no-any-return]
 

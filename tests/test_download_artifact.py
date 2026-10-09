@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -10,6 +10,7 @@ import pytest
 async def mock_get_session():
     async def _gen():
         yield MagicMock()
+
     return _gen()
 
 
@@ -22,10 +23,13 @@ def _mock_db():
 @pytest.fixture
 def client(_mock_db):
     import importlib
+
     import backend.main
+
     importlib.reload(backend.main)
     from backend.main import app
     from fastapi.testclient import TestClient
+
     return TestClient(app)
 
 

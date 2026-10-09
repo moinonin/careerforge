@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     broker_url: str = "redis://localhost:6379/0"
     result_backend: str = "redis://localhost:6379/0"
+    use_celery: bool = False  # False → generation runs inline in the request (dev/tests)
 
     # ── LLM providers ────────────────────────────────────────────────────────
     default_llm_provider: str = "openai"

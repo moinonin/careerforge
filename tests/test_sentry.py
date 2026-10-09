@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import patch
 
 from backend.monitoring.sentry_init import (
     capture_exception,
@@ -45,8 +43,8 @@ def test_initialize_sentry_init_fails(monkeypatch) -> None:
 
 def test_initialize_sentry_sdk_none(monkeypatch) -> None:
     """If sentry_sdk is None (not installed), initialize_sentry skips."""
-    from backend.config import settings
     import backend.monitoring.sentry_init as sentry_mod
+    from backend.config import settings
 
     monkeypatch.setattr(settings, "sentry_dsn", "https://test@sentry.io/1")
     sentry_mod.sentry_sdk = None
@@ -56,6 +54,7 @@ def test_initialize_sentry_sdk_none(monkeypatch) -> None:
 def test_capture_exception_when_disabled() -> None:
     """capture_exception is a no-op when sentry not initialized."""
     import backend.monitoring.sentry_init as sentry_mod
+
     sentry_mod._sentry_initialized = False
     capture_exception(ValueError("test"))  # should not raise
 
@@ -63,14 +62,15 @@ def test_capture_exception_when_disabled() -> None:
 def test_capture_message_when_disabled() -> None:
     """capture_message is a no-op when sentry not initialized."""
     import backend.monitoring.sentry_init as sentry_mod
+
     sentry_mod._sentry_initialized = False
     capture_message("test message")  # should not raise
 
 
 def test_initialize_sentry_sets_flag(monkeypatch) -> None:
     """On successful init, _sentry_initialized is True."""
-    from backend.config import settings
     import backend.monitoring.sentry_init as sentry_mod
+    from backend.config import settings
 
     monkeypatch.setattr(settings, "sentry_dsn", "https://test@sentry.io/1")
     with patch("backend.monitoring.sentry_init.sentry_sdk") as mock_sentry:

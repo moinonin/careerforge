@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from backend.auth.schemas import CurrentUserId
-from backend.config import settings
 from backend.database import get_session
 from backend.models import Feedback, GenerationJob
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -63,12 +62,21 @@ async def get_my_feedback(
     session: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> dict:
     """Get current user's feedback history."""
-    stmt = select(Feedback).where(Feedback.user_id == current_user_id).order_by(Feedback.created_at.desc())
+    stmt = (
+        select(Feedback)
+        .where(Feedback.user_id == current_user_id)
+        .order_by(Feedback.created_at.desc())
+    )
     result = await session.execute(stmt)
     feedbacks = result.scalars().all()
     return {
         "feedbacks": [
-            {"id": f.id, "rating": f.rating, "comment": f.comment, "created_at": f.created_at.isoformat()}
+            {
+                "id": f.id,
+                "rating": f.rating,
+                "comment": f.comment,
+                "created_at": f.created_at.isoformat(),
+            }
             for f in feedbacks
         ]
     }

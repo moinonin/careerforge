@@ -10,26 +10,30 @@ Implements:
 
 from __future__ import annotations
 
-import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, EmailStr
-from sqlalchemy import select, func
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from backend.api.dependencies import get_current_user, get_db
 from backend.models import (
-    Organization, OrganizationMember, OrganizationInvitation,
-    OrganizationMasterProfile, OrganizationUsageLog, User, AuditLog,
+    AuditLog,
+    Organization,
+    OrganizationInvitation,
+    OrganizationMasterProfile,
+    OrganizationMember,
+    OrganizationUsageLog,
+    User,
 )
 from backend.security import generate_token_hash
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, EmailStr
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/api/v1/organizations", tags=["organizations"])
 
 
 # ─── Request/Response Models ───────────────────────────────────────────
+
 
 class OrganizationCreate(BaseModel):
     name: str
@@ -119,6 +123,7 @@ class UsageResponse(BaseModel):
 
 # ─── Helpers ───────────────────────────────────────────────────────────
 
+
 async def get_org_member(
     org_id: str, user_id: str, db: AsyncSession, required_role: str | None = None
 ) -> OrganizationMember:
@@ -138,6 +143,7 @@ async def get_org_member(
 
 
 # ─── Routes ────────────────────────────────────────────────────────────
+
 
 @router.post("", response_model=OrganizationResponse, status_code=status.HTTP_201_CREATED)
 async def create_organization(
@@ -264,7 +270,10 @@ async def remove_member(
 
 # ─── Invitations ───────────────────────────────────────────────────────
 
-@router.post("/{org_id}/invite", response_model=InvitationResponse, status_code=status.HTTP_201_CREATED)
+
+@router.post(
+    "/{org_id}/invite", response_model=InvitationResponse, status_code=status.HTTP_201_CREATED
+)
 async def invite_member(
     org_id: str,
     data: InvitationCreate,
@@ -274,9 +283,7 @@ async def invite_member(
     """Invite a user to the organization (admin only)."""
     await get_org_member(org_id, current_user.id, db, required_role="admin")
 
-    result = await db.execute(
-        select(Organization).where(Organization.id == org_id)
-    )
+    result = await db.execute(select(Organization).where(Organization.id == org_id))
     org = result.scalar_one_or_none()
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
@@ -355,7 +362,9 @@ async def accept_invitation(
 
     # Check seat limit
     result = await db.execute(
-        select(OrganizationMember).where(OrganizationMember.organization_id == invitation.organization_id)
+        select(OrganizationMember).where(
+            OrganizationMember.organization_id == invitation.organization_id
+        )
     )
     member_count = len(result.scalars().all())
     if member_count >= org.max_seats:
@@ -391,7 +400,12 @@ async def accept_invitation(
 
 # ─── Master Profiles ──────────────────────────────────────────────────
 
-@router.post("/{org_id}/master-profiles", response_model=MasterProfileResponse, status_code=status.HTTP_201_CREATED)
+
+@router.post(
+    "/{org_id}/master-profiles",
+    response_model=MasterProfileResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_master_profile(
     org_id: str,
     data: MasterProfileCreate,
@@ -433,10 +447,12 @@ async def list_master_profiles(
     """List shared master profiles for an organization (members only)."""
     await get_org_member(org_id, current_user.id, db)
     result = await db.execute(
-        select(OrganizationMasterProfile).where(
+        select(OrganizationMasterProfile)
+        .where(
             OrganizationMasterProfile.organization_id == org_id,
             OrganizationMasterProfile.is_shared == True,
-        ).order_by(OrganizationMasterProfile.created_at.desc())
+        )
+        .order_by(OrganizationMasterProfile.created_at.desc())
     )
     profiles = result.scalars().all()
     return [
@@ -480,6 +496,7 @@ async def delete_master_profile(
 
 # ─── Usage Tracking ────────────────────────────────────────────────────
 
+
 @router.post("/{org_id}/usage/log")
 async def log_generation_usage(
     org_id: str,
@@ -514,9 +531,7 @@ async def log_generation_usage(
         db.add(log_entry)
 
     # Update organization's used quota
-    result = await db.execute(
-        select(Organization).where(Organization.id == org_id)
-    )
+    result = await db.execute(select(Organization).where(Organization.id == org_id))
     org = result.scalar_one_or_none()
     if org:
         org.team_quota_used += 1
@@ -547,9 +562,8 @@ async def get_org_usage(
 
     # Get subscription info
     from backend.models import Subscription
-    result = await db.execute(
-        select(Subscription).where(Subscription.organization_id == org_id)
-    )
+
+    result = await db.execute(select(Subscription).where(Subscription.organization_id == org_id))
     subscription = result.scalar_one_or_none()
 
     # Get this month's generation count from usage log
@@ -602,6 +616,7 @@ async def reset_quota(
 
 
 # ─── Team Billing ──────────────────────────────────────────────────────
+
 
 @router.patch("/{org_id}/billing")
 async def update_billing(

@@ -47,10 +47,8 @@ npm install
 ### 2. Run database migrations
 
 ```bash
-cd backend
-uv run python -m backend.main --migrate
-# Or use the migration script:
-uv run python migrate_sprint8.py
+# From the repo root — Alembic is the single source of truth for the schema
+make db-migrate          # runs: python -m alembic upgrade head
 ```
 
 ### 3. Build frontend

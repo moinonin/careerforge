@@ -142,8 +142,14 @@ class JevExperienceEntry:
     bullets: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
-        return {"role": self.role, "company": self.company, "location": self.location,
-                "start_date": self.start_date, "end_date": self.end_date, "bullets": self.bullets}
+        return {
+            "role": self.role,
+            "company": self.company,
+            "location": self.location,
+            "start_date": self.start_date,
+            "end_date": self.end_date,
+            "bullets": self.bullets,
+        }
 
 
 @dataclass
@@ -155,8 +161,13 @@ class JevEducationEntry:
     end_date: str = ""
 
     def to_dict(self) -> dict[str, Any]:
-        return {"degree": self.degree, "institution": self.institution, "location": self.location,
-                "start_date": self.start_date, "end_date": self.end_date}
+        return {
+            "degree": self.degree,
+            "institution": self.institution,
+            "location": self.location,
+            "start_date": self.start_date,
+            "end_date": self.end_date,
+        }
 
 
 class JevClient:
@@ -258,9 +269,7 @@ class JevClient:
         }
 
         try:
-            response = await self._client.post(
-                API_BASE, json=payload, headers=headers
-            )
+            response = await self._client.post(API_BASE, json=payload, headers=headers)
             response.raise_for_status()
             data = response.json()
         except httpx.HTTPError as exc:
@@ -363,9 +372,7 @@ class JevClient:
         }
 
         try:
-            response = await self._client.post(
-                API_BASE, json=payload, headers=headers
-            )
+            response = await self._client.post(API_BASE, json=payload, headers=headers)
             response.raise_for_status()
             data = response.json()
         except httpx.HTTPError as exc:
@@ -380,15 +387,23 @@ class JevClient:
         """Parse the raw Jev response into a JevProfileAnalysis dataclass."""
         answers = data.get("answers", {})
         usage = data.get("usage", {})
-        result = JevProfileAnalysis(raw_answers=answers, input_tokens=usage.get("input_tokens", 0), output_tokens=usage.get("output_tokens", 0))
+        result = JevProfileAnalysis(
+            raw_answers=answers,
+            input_tokens=usage.get("input_tokens", 0),
+            output_tokens=usage.get("output_tokens", 0),
+        )
 
         def _choice(name: str) -> JevChoiceAnswer | None:
             d = answers.get(name, {})
-            return JevChoiceAnswer(
-                choice=d.get("choice", ""),
-                confidence=d.get("confidence", 0.0),
-                probabilities=d.get("probabilities", {}),
-            ) if d.get("choice") else None
+            return (
+                JevChoiceAnswer(
+                    choice=d.get("choice", ""),
+                    confidence=d.get("confidence", 0.0),
+                    probabilities=d.get("probabilities", {}),
+                )
+                if d.get("choice")
+                else None
+            )
 
         def _noul(name: str) -> JevNoulAnswer | None:
             d = answers.get(name, {})
@@ -396,12 +411,16 @@ class JevClient:
 
         def _score(name: str) -> JevScoreAnswer | None:
             d = answers.get(name, {})
-            return JevScoreAnswer(
-                score=d.get("score", 0.0),
-                confidence=d.get("confidence", 0.0),
-                legend=d.get("legend", {}),
-                probabilities=d.get("probabilities", {}),
-            ) if d.get("score") is not None else None
+            return (
+                JevScoreAnswer(
+                    score=d.get("score", 0.0),
+                    confidence=d.get("confidence", 0.0),
+                    legend=d.get("legend", {}),
+                    probabilities=d.get("probabilities", {}),
+                )
+                if d.get("score") is not None
+                else None
+            )
 
         result.has_phone = _noul("has_phone")
         result.has_linkedin = _noul("has_linkedin")
@@ -425,33 +444,49 @@ class JevClient:
         usage = data.get("usage", {})
 
         skill_category_data = answers.get("skill_category", {})
-        skill_category = JevChoiceAnswer(
-            choice=skill_category_data.get("choice", ""),
-            confidence=skill_category_data.get("confidence", 0.0),
-            probabilities=skill_category_data.get("probabilities", {}),
-        ) if skill_category_data.get("choice") else None
+        skill_category = (
+            JevChoiceAnswer(
+                choice=skill_category_data.get("choice", ""),
+                confidence=skill_category_data.get("confidence", 0.0),
+                probabilities=skill_category_data.get("probabilities", {}),
+            )
+            if skill_category_data.get("choice")
+            else None
+        )
 
         tech_stack_data = answers.get("tech_stack", {})
-        tech_stack = JevChoiceAnswer(
-            choice=tech_stack_data.get("choice", ""),
-            confidence=tech_stack_data.get("confidence", 0.0),
-            probabilities=tech_stack_data.get("probabilities", {}),
-        ) if tech_stack_data.get("choice") else None
+        tech_stack = (
+            JevChoiceAnswer(
+                choice=tech_stack_data.get("choice", ""),
+                confidence=tech_stack_data.get("confidence", 0.0),
+                probabilities=tech_stack_data.get("probabilities", {}),
+            )
+            if tech_stack_data.get("choice")
+            else None
+        )
 
         seniority_data = answers.get("seniority_level", {})
-        seniority_level = JevScoreAnswer(
-            score=seniority_data.get("score", 0.0),
-            confidence=seniority_data.get("confidence", 0.0),
-            legend=seniority_data.get("legend", {}),
-            probabilities=seniority_data.get("probabilities", {}),
-        ) if seniority_data.get("score") else None
+        seniority_level = (
+            JevScoreAnswer(
+                score=seniority_data.get("score", 0.0),
+                confidence=seniority_data.get("confidence", 0.0),
+                legend=seniority_data.get("legend", {}),
+                probabilities=seniority_data.get("probabilities", {}),
+            )
+            if seniority_data.get("score")
+            else None
+        )
 
         salary_data = answers.get("salary_bracket", {})
-        salary_bracket = JevChoiceAnswer(
-            choice=salary_data.get("choice", ""),
-            confidence=salary_data.get("confidence", 0.0),
-            probabilities=salary_data.get("probabilities", {}),
-        ) if salary_data.get("choice") else None
+        salary_bracket = (
+            JevChoiceAnswer(
+                choice=salary_data.get("choice", ""),
+                confidence=salary_data.get("confidence", 0.0),
+                probabilities=salary_data.get("probabilities", {}),
+            )
+            if salary_data.get("choice")
+            else None
+        )
 
         noul_skill = answers.get("has_red_flags", {})
         has_red_flags = JevNoulAnswer(value=noul_skill.get("noul", 0.0))

@@ -451,7 +451,8 @@ def assemble_prompt(
         output_language=(
             f"\n\nOUTPUT LANGUAGE: Respond in {LANGUAGE_LABELS.get(output_language, output_language)}. "
             f"Use {output_language} language for all content."
-            if output_language != "en" else ""
+            if output_language != "en"
+            else ""
         ),
     )
 
@@ -464,13 +465,19 @@ def _build_jev_prompt_section(jev_context: dict[str, Any]) -> str:
     if jev_context.get("primary_tech_stack"):
         parts.append(f"Primary tech stack: {jev_context['primary_tech_stack']}")
     if jev_context.get("seniority_level"):
-        parts.append(f"Seniority level: {jev_context['seniority_level']} ({jev_context.get('seniority_label', '')})")
+        parts.append(
+            f"Seniority level: {jev_context['seniority_level']} ({jev_context.get('seniority_label', '')})"
+        )
     if jev_context.get("salary_bracket"):
         parts.append(f"Salary bracket: {jev_context['salary_bracket']}")
     if jev_context.get("has_red_flags"):
-        parts.append(f"Has red flags: {'yes' if jev_context['has_red_flags'] > 0.5 else 'no'} ({jev_context['has_red_flags']:.2f} confidence)")
+        parts.append(
+            f"Has red flags: {'yes' if jev_context['has_red_flags'] > 0.5 else 'no'} ({jev_context['has_red_flags']:.2f} confidence)"
+        )
     if jev_context.get("remote_ok"):
-        parts.append(f"Remote work: {'yes' if jev_context['remote_ok'] > 0.5 else 'no'} ({jev_context['remote_ok']:.2f} confidence)")
+        parts.append(
+            f"Remote work: {'yes' if jev_context['remote_ok'] > 0.5 else 'no'} ({jev_context['remote_ok']:.2f} confidence)"
+        )
     parts.append(
         "\nUse this structured analysis as CONTEXT to guide your CV generation. "
         "The candidate's profile and the job description are the authoritative "

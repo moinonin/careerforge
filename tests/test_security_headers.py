@@ -4,18 +4,18 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-import pytest
-
-from backend.middleware.security_headers import SecurityHeadersMiddleware
 from backend.config import settings
+from backend.middleware.security_headers import SecurityHeadersMiddleware
 
 
 def _make_app():
     """Create an async app that calls the wrapped_send callback."""
+
     async def app(scope, receive, send):
         # Send a response start message
         await send({"type": "http.response.start", "status": 200, "headers": []})
         await send({"type": "http.response.body", "body": b""})
+
     return app
 
 

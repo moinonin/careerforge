@@ -12,9 +12,7 @@ import uuid
 from typing import Any
 
 import structlog
-from starlette.types import ASGIApp, Scope, Receive, Send
-
-from backend.config import settings
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 log = structlog.get_logger()
 
@@ -48,6 +46,7 @@ class RequestIdMiddleware:
                 if token.startswith("Bearer "):
                     try:
                         from backend.auth.jwt_utils import get_user_id_from_token
+
                         user_id = get_user_id_from_token(token[7:])
                     except Exception:
                         pass

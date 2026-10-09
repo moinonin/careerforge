@@ -6,9 +6,8 @@ X-Content-Type-Options, and Referrer-Policy to every response.
 
 from __future__ import annotations
 
-from starlette.types import ASGIApp, Scope, Receive, Send
-
 from backend.config import settings
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 
 class SecurityHeadersMiddleware:
@@ -28,9 +27,7 @@ class SecurityHeadersMiddleware:
                 headers.append((b"x-content-type-options", b"nosniff"))
                 headers.append((b"x-frame-options", b"DENY"))
                 headers.append((b"referrer-policy", b"strict-origin-when-cross-origin"))
-                headers.append(
-                    (b"content-security-policy", b"default-src 'self'")
-                )
+                headers.append((b"content-security-policy", b"default-src 'self'"))
                 if settings.environment == "production":
                     headers.append(
                         (

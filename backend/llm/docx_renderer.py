@@ -19,6 +19,7 @@ from docx.shared import Inches, Pt
 
 # ── Helper utilities ────────────────────────────────────────────────────────────
 
+
 def _set_cell_border(cell: Any, **kwargs: Any) -> None:
     """Add a bottom border to a table cell (used for the name/contact divider)."""
     tc = cell._tc
@@ -44,7 +45,7 @@ def _add_horizontal_rule(doc: Document, space_before: float = 0, space_after: fl
     pBdr = OxmlElement("w:pBdr")
     bottom = OxmlElement("w:bottom")
     bottom.set(qn("w:val"), "single")
-    bottom.set(qn("w:sz"), "6")       # 0.75pt
+    bottom.set(qn("w:sz"), "6")  # 0.75pt
     bottom.set(qn("w:space"), "1")
     bottom.set(qn("w:color"), "000000")
     pBdr.append(bottom)
@@ -69,8 +70,14 @@ def _heading(doc: Document, text: str, level: int = 1) -> None:
         run.font.size = Pt(11)
 
 
-def _body(doc: Document, text: str, bold: bool = False, italic: bool = False,
-          size: int | None = None, indent: float = 0) -> None:
+def _body(
+    doc: Document,
+    text: str,
+    bold: bool = False,
+    italic: bool = False,
+    size: int | None = None,
+    indent: float = 0,
+) -> None:
     """Add a body paragraph."""
     p = doc.add_paragraph()
     p.paragraph_format.space_before = Pt(0)
@@ -118,6 +125,7 @@ def _format_dates(start: str | None, end: str | None) -> str:
 
 
 # ── CV Renderer ────────────────────────────────────────────────────────────────
+
 
 class DocxRenderer:
     """Render a CV JSON dict to an ATS-compliant .docx Document.
@@ -282,8 +290,7 @@ class DocxRenderer:
             # Relevance note (italic, indented)
             relevance = exp.get("relevance_note", "")
             if relevance:
-                _body(doc, f"Relevance to target role: {relevance}",
-                      italic=True, indent=0.25)
+                _body(doc, f"Relevance to target role: {relevance}", italic=True, indent=0.25)
 
             # Bullets
             for b in exp.get("bullets", []):
@@ -399,6 +406,7 @@ class DocxRenderer:
 
 
 # ── Cover Letter Renderer ───────────────────────────────────────────────────────
+
 
 class CoverLetterDocxRenderer:
     """Render a cover letter JSON dict to a .docx Document."""

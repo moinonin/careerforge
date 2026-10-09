@@ -7,14 +7,11 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from backend.config import settings
+from backend.models import GenerationJob
 from fastapi import APIRouter
 from redis.asyncio import Redis
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from backend.config import settings
-from backend.database import get_session
-from backend.models import GenerationJob
 
 router = APIRouter(tags=["health"])
 
@@ -23,6 +20,7 @@ async def _check_database() -> dict:
     """Verify the database is reachable and responsive."""
     try:
         from backend.database import get_session
+
         async for session in get_session():
             result = await session.execute(select(GenerationJob).limit(1))
             _ = result.scalars().all()
@@ -69,6 +67,7 @@ async def _check_llm_provider() -> dict:
         return {"status": "skipped", "reason": "No LLM provider configured"}
     try:
         import httpx
+
         # For local providers (Ollama), check the health endpoint
         if settings.default_llm_provider == "ollama":
             async with httpx.AsyncClient(timeout=3) as client:

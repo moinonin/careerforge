@@ -64,6 +64,7 @@ bearer = HTTPBearer(auto_error=False)
 
 # ── Helper: issue tokens for a user ──────────────────────────────────────────
 
+
 def _issue_tokens(user_id: str, email: str) -> TokenResponse:
     return TokenResponse(
         access_token=create_access_token(user_id, email),
@@ -75,6 +76,7 @@ def _issue_tokens(user_id: str, email: str) -> TokenResponse:
 
 # ── Signup ────────────────────────────────────────────────────────────────────
 
+
 @router.post("/signup", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 async def signup(
     req: SignupRequest,
@@ -82,12 +84,17 @@ async def signup(
 ) -> TokenResponse:
     try:
         user = await auth_signup(session, req.email, req.password, req.full_name)
+        from backend.auth.jwt_utils import create_verify_token
+        from backend.email import send_verification_email
+
+        await send_verification_email(user.email, create_verify_token(user.id))
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     return _issue_tokens(user.id, user.email)
 
 
 # ── Login ──────────────────────────────────────────────────────────────────────
+
 
 @router.post("/login", response_model=TokenResponse)
 async def login(
@@ -97,11 +104,14 @@ async def login(
     try:
         user, _, _ = await auth_login(session, req.email, req.password)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password") from exc
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password"
+        ) from exc
     return _issue_tokens(user.id, user.email)
 
 
 # ── Refresh ────────────────────────────────────────────────────────────────────
+
 
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh(
@@ -111,7 +121,9 @@ async def refresh(
     try:
         new_access, new_refresh = await auth_refresh(session, req.refresh_token)
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Invalid refresh token: {exc}") from exc
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Invalid refresh token: {exc}"
+        ) from exc
     return TokenResponse(
         access_token=new_access,
         refresh_token=new_refresh,
@@ -122,29 +134,39 @@ async def refresh(
 
 # ── Logout ─────────────────────────────────────────────────────────────────────
 
+
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 async def logout(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)],  # noqa: B008
     session: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> None:
     if credentials is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing authorization header")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing authorization header"
+        )
     try:
         user_id = get_user_id_from_token(credentials.credentials)
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Invalid token: {exc}") from exc
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Invalid token: {exc}"
+        ) from exc
     with suppress(ValueError):
         await revoke_refresh_token(session, credentials.credentials, user_id)
 
 
 # ── Forgot / Reset password ────────────────────────────────────────────────────
 
+
 @router.post("/forgot-password", status_code=status.HTTP_202_ACCEPTED)
 async def forgot_password(
     req: ForgotPasswordRequest,
     session: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> dict:
-    await initiate_password_reset(session, req.email)
+    token = await initiate_password_reset(session, req.email)
+    if token:
+        from backend.email import send_password_reset_email
+
+        await send_password_reset_email(req.email, token)
     return {"status": "ok", "message": "If the email exists, a reset link has been sent"}
 
 
@@ -157,7 +179,9 @@ async def reset_password(
         payload = decode_token(req.token, expected_type="reset")
         user_id = payload["sub"]  # type: ignore[no-any-return]
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid reset token: {exc}") from exc
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid reset token: {exc}"
+        ) from exc
     try:
         await auth_reset_password(session, user_id, req.token, req.new_password)
     except ValueError as exc:
@@ -166,6 +190,7 @@ async def reset_password(
 
 
 # ── /users/me ────────────────────────────────────────────────────────────────
+
 
 @users_router.get("/me", response_model=UserMeResponse)
 async def get_me(
@@ -205,3 +230,31 @@ async def update_me(
         role=user.role,
         created_at=user.created_at.isoformat() if user.created_at else None,
     )
+
+
+# ── Email verification ───────────────────────────────────────────────────────
+
+
+@router.get("/verify-email", status_code=status.HTTP_200_OK)
+async def verify_email(
+    token: str,
+    session: AsyncSession = Depends(get_session),  # noqa: B008
+) -> dict:
+    """Verify a user's email address from the link sent at signup."""
+    try:
+        payload = decode_token(token, expected_type="verify")
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid verification token: {exc}"
+        ) from exc
+    from sqlalchemy import select
+
+    from backend.models import User
+
+    result = await session.execute(select(User).where(User.id == payload["sub"]))
+    user = result.scalar_one_or_none()
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    user.email_verified = True
+    await session.commit()
+    return {"status": "verified"}

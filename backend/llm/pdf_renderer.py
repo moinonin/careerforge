@@ -22,8 +22,8 @@ def find_libreoffice() -> str | None:
     candidates = [
         shutil.which("soffice"),
         shutil.which("libreoffice"),
-        "/opt/homebrew/bin/soffice",           # macOS Homebrew ARM
-        "/usr/local/bin/libreoffice",           # Linux/macOS x86
+        "/opt/homebrew/bin/soffice",  # macOS Homebrew ARM
+        "/usr/local/bin/libreoffice",  # Linux/macOS x86
         "/Applications/LibreOffice.app/Contents/MacOS/soffice",  # macOS app bundle
     ]
     for candidate in candidates:
@@ -101,6 +101,7 @@ class PDFRenderer:
     def _get_docx_renderer(self) -> DocxRenderer:
         if self._docx_renderer is None:
             from backend.llm.docx_renderer import DocxRenderer
+
             self._docx_renderer = DocxRenderer()
         return self._docx_renderer
 

@@ -18,6 +18,7 @@ _parse_jobs: dict[str, dict] = {}
 
 # ── List profiles ─────────────────────────────────────────────────────────────
 
+
 class ProfileListResponse(BaseModel):
     profiles: list[dict]
 
@@ -33,6 +34,7 @@ async def list_profiles(
 
 # ── Get single profile ────────────────────────────────────────────────────────
 
+
 @router.get("/{profile_id}", response_model=dict)
 async def get_profile(
     profile_id: str,
@@ -47,6 +49,7 @@ async def get_profile(
 
 # ── Create profile ────────────────────────────────────────────────────────────
 
+
 @router.post("", status_code=status.HTTP_201_CREATED, response_model=dict)
 async def create_profile(
     request: profiles_schemas.ProfileCreateRequest,
@@ -57,6 +60,7 @@ async def create_profile(
 
 
 # ── Update profile ────────────────────────────────────────────────────────────
+
 
 @router.put("/{profile_id}", response_model=dict)
 async def update_profile(
@@ -73,6 +77,7 @@ async def update_profile(
 
 # ── Patch section ─────────────────────────────────────────────────────────────
 
+
 @router.patch("/{profile_id}/sections/{section_name}", response_model=dict)
 async def patch_section(
     profile_id: str,
@@ -87,12 +92,15 @@ async def patch_section(
             detail=f"Invalid section name: {section_name}. Valid sections: {sorted(profiles_schemas.VALID_SECTIONS)}",
         )
     try:
-        return await profiles_service.patch_section(session, profile_id, current_user_id, section_name, request)
+        return await profiles_service.patch_section(
+            session, profile_id, current_user_id, section_name, request
+        )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
 
 # ── Delete profile ────────────────────────────────────────────────────────────
+
 
 @router.delete("/{profile_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_profile(
@@ -108,6 +116,7 @@ async def delete_profile(
 
 # ── Set default profile ───────────────────────────────────────────────────────
 
+
 @router.post("/{profile_id}/set-default", response_model=dict)
 async def set_default(
     profile_id: str,
@@ -122,6 +131,7 @@ async def set_default(
 
 # ── Skills autocomplete ───────────────────────────────────────────────────────
 
+
 class SkillSuggestionResponse(BaseModel):
     suggestions: list[dict[str, str]]
 
@@ -135,6 +145,7 @@ async def skill_suggestions(
 
 
 # ── Profile import (CV upload trigger) ────────────────────────────────────────
+
 
 class ProfileImportRequest(BaseModel):
     pass  # file is uploaded as multipart form data
@@ -152,9 +163,16 @@ async def import_cv(
     then creates the profile in the database.
     """
     import uuid
+
     from backend.profiles.schemas import MasterProfileData
+    from backend.validators.upload_validation import validate_cv_upload
+
     parse_job_id = str(uuid.uuid4())
     file_bytes = await file.read()
+    try:
+        validate_cv_upload(file_bytes, file.filename or "", file.content_type)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     try:
         profile = await parse_cv_with_jev(file_bytes, file.filename or "")
         profile_dict = profile.model_dump()
@@ -171,6 +189,7 @@ async def import_cv(
 
         # Auto-create the profile
         from backend.profiles.service import create_profile
+
         create_req = profiles_schemas.ProfileCreateRequest(
             title=f"Imported CV — {profile_dict['contact'].get('full_name', 'Unknown')}",
             profile_data=MasterProfileData(**profile_dict),

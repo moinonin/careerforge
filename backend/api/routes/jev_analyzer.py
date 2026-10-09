@@ -3,11 +3,10 @@ classification, then feeds the result into the LLM for detailed analysis."""
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from backend.database import get_session
-from backend.jev import JevClient, JevAnalysis
+from backend.jev import JevAnalysis, JevClient
 from backend.llm.adapter import GenerationError
 from backend.llm.router import build_adapter
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -124,7 +123,7 @@ async def _run_jev_analyzer(
         async with JevClient() as client:
             jev_analysis = await client.analyze_job(job_description, company_name)
             jev_raw = jev_analysis.to_context_dict()
-    except RuntimeError as exc:
+    except RuntimeError:
         if not use_llm_fallback:
             raise
         # Jev failed but fallback is allowed — proceed with empty context
@@ -196,13 +195,19 @@ def _build_jev_enrichment_prompt(
         if jev_context.get("primary_tech_stack"):
             parts.append(f"- Primary tech stack: {jev_context['primary_tech_stack']}")
         if jev_context.get("seniority_level"):
-            parts.append(f"- Seniority level: {jev_context['seniority_level']} ({jev_context.get('seniority_label', '')})")
+            parts.append(
+                f"- Seniority level: {jev_context['seniority_level']} ({jev_context.get('seniority_label', '')})"
+            )
         if jev_context.get("salary_bracket"):
             parts.append(f"- Salary bracket: {jev_context['salary_bracket']}")
         if jev_context.get("has_red_flags"):
-            parts.append(f"- Has red flags: {'yes' if jev_context['has_red_flags'] > 0.5 else 'no'} ({jev_context['has_red_flags']:.2f})")
+            parts.append(
+                f"- Has red flags: {'yes' if jev_context['has_red_flags'] > 0.5 else 'no'} ({jev_context['has_red_flags']:.2f})"
+            )
         if jev_context.get("remote_ok"):
-            parts.append(f"- Remote work: {'yes' if jev_context['remote_ok'] > 0.5 else 'no'} ({jev_context['remote_ok']:.2f})")
+            parts.append(
+                f"- Remote work: {'yes' if jev_context['remote_ok'] > 0.5 else 'no'} ({jev_context['remote_ok']:.2f})"
+            )
         jev_section = "\n".join(parts)
 
     company_section = (

@@ -113,14 +113,34 @@ async def run_generation(
         jev_context=jev_context,
     )
 
-    # 3. Pick and run the adapter (DB-driven for Sprint 6; env-driven fallback)
-    from backend.llm.router import build_adapter_from_config
+    # 3. Resolve credentials (DB-driven for Sprint 6; env-driven fallback),
+    #    then construct the adapter via this module's ``build_adapter`` import
+    #    so tests can patch ``backend.llm.service.build_adapter``.
+    from backend.llm.router import get_default_provider, get_user_active_config
+    from backend.security import decrypt_api_key
 
-    adapter, effective_provider, effective_model = await build_adapter_from_config(
-        session,
-        job.user_id,
-        provider_slug=provider,
-        model=model,
+    api_key: str | None = None
+    base_url: str | None = None
+
+    config = await get_user_active_config(session, job.user_id)
+    if config is not None and (provider is None or config.provider == provider):
+        effective_provider = config.provider
+        effective_model = model or config.model_name
+        if config.api_key_encrypted:
+            api_key = decrypt_api_key(config.api_key_encrypted)
+        base_url = config.base_url
+    elif provider is None:
+        effective_provider = get_default_provider()
+        effective_model = model
+    else:
+        effective_provider = provider
+        effective_model = model
+
+    adapter = build_adapter(
+        provider_slug=effective_provider,
+        api_key=api_key,
+        base_url=base_url,
+        model=effective_model,
     )
 
     # 4. Generate — the adapter handles JSON parse + full validation (top-level
@@ -369,7 +389,9 @@ async def mark_job_completed(
     return job
 
 
-async def mark_job_failed(session: AsyncSession, job_id: str, error_message: str) -> GenerationJob | None:
+async def mark_job_failed(
+    session: AsyncSession, job_id: str, error_message: str
+) -> GenerationJob | None:
     """Set a job to ``failed`` with an error message.  Returns the updated job or None."""
     return await _set_status(session, job_id, FAILED, error_message=error_message)
 

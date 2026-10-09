@@ -81,6 +81,7 @@ def get_adapter_class(provider: str) -> type[LLMAdapter] | None:
 
 # ── Validation helpers ────────────────────────────────────────────────────────
 
+
 def _detect_schema_type(schema: dict[str, Any]) -> str:
     """Return which output model to use for *schema*.
 

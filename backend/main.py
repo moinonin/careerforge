@@ -16,23 +16,24 @@ from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from backend.api.routes import health  # noqa: E402
 from backend.api.routes.admin import router as admin_router  # noqa: E402
 from backend.api.routes.analyzer import router as analyzer_router  # noqa: E402
-from backend.api.routes.jev_analyzer import router as jev_analyzer_router  # noqa: E402
 from backend.api.routes.billing import router as billing_router  # noqa: E402
 from backend.api.routes.feedback import router as feedback_router  # noqa: E402
 from backend.api.routes.generate import router as generate_router  # noqa: E402
+from backend.api.routes.jev_analyzer import router as jev_analyzer_router  # noqa: E402
 from backend.api.routes.llm_config import router as llm_config_router  # noqa: E402
 from backend.api.routes.organizations import router as organizations_router  # noqa: E402
 from backend.auth.router import router as auth_router  # noqa: E402
 from backend.auth.router import users_router  # noqa: E402
 from backend.config import settings  # noqa: E402
 from backend.database import init_db, shutdown_db  # noqa: E402
-from backend.middleware.rate_limit import rate_limit_middleware  # noqa: E402
-from backend.middleware.security_headers import security_headers_middleware  # noqa: E402
-from backend.middleware.request_id import request_id_middleware  # noqa: E402
 from backend.middleware.error_handler import error_handler_middleware  # noqa: E402
+from backend.middleware.rate_limit import rate_limit_middleware  # noqa: E402
+from backend.middleware.request_id import request_id_middleware  # noqa: E402
+from backend.middleware.security_headers import security_headers_middleware  # noqa: E402
 from backend.profiles.router import router as profiles_router  # noqa: E402
 
 # ── Logging ────────────────────────────────────────────────────────────────
+
 
 def _configure_logging() -> None:
     """Configure structlog to emit JSON to stdout in production, readable in dev."""
@@ -68,16 +69,28 @@ initialize_sentry()
 
 # ── Lifespan ────────────────────────────────────────────────────────────────
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     log.info("startup", action="lifespan", environment=settings.environment)
     await init_db()
     log.info("db_connected", action="lifespan")
+    if settings.environment != "test":
+        try:
+            from backend.tasks import recover_stuck_jobs
+
+            recovered = await recover_stuck_jobs()
+            if recovered:
+                log.info("generation_jobs_recovered", count=recovered)
+        except Exception as exc:  # recovery must not block startup
+            log.warning("generation_recovery_skipped", error=str(exc))
     yield
     log.info("shutdown", action="lifespan")
     await shutdown_db()
 
+
 # ── App factory ─────────────────────────────────────────────────────────────
+
 
 def create_app() -> FastAPI:
     app = FastAPI(
@@ -131,11 +144,13 @@ def create_app() -> FastAPI:
 
     return app
 
+
 # ── Module-level app (fastapi dev / uvicorn entry point) ──────────────────
 
 app = create_app()
 
 # ── Module-level helpers for test patching ────────────────────────────────────
+
 
 def get_settings():
     """Return the Settings class for patching in tests."""
@@ -143,6 +158,7 @@ def get_settings():
 
 
 # ── Entry point for `careerforge-server` console script ────────────────────────
+
 
 def main() -> None:
     """Run the uvicorn server. Called by the `careerforge-server` console script."""

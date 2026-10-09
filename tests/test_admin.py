@@ -15,6 +15,7 @@ async def mock_get_session():
         mock_result.scalar_one_or_none = MagicMock(return_value=None)
         mock_session.execute.return_value = mock_result
         yield mock_session
+
     return _gen
 
 
@@ -31,19 +32,23 @@ def client(_mock_db):
     Reloads backend.main and admin module so Depends captures the mock.
     """
     import importlib
-    import backend.database
+
     import backend.api.routes.admin
+    import backend.database
     import backend.main
+
     importlib.reload(backend.api.routes.admin)
     importlib.reload(backend.main)
     from backend.main import app
     from fastapi.testclient import TestClient
+
     return TestClient(app)
 
 
 def test_admin_routes_registered():
     """Verify admin endpoints are registered in the router."""
     from backend.api.routes.admin import router
+
     routes = [r.path for r in router.routes]
     assert "/api/v1/admin/users" in routes
     assert "/api/v1/admin/generation-log" in routes

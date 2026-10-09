@@ -2,19 +2,19 @@
 
 from __future__ import annotations
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+from backend.main import app
 from backend.middleware.rate_limit import (
+    TIER_LIMITS,
     RateLimitMiddleware,
     _check_redis_limit,
     _endpoint_category,
-    TIER_LIMITS,
 )
-from backend.main import app
-
 
 # ── Unit tests ──────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_check_redis_limit_allows_within_window():
@@ -47,10 +47,12 @@ async def test_check_redis_limit_allows_after_window():
     """Old entries are cleaned up and new requests are allowed."""
     redis = MagicMock()
     pipeline = MagicMock()
-    pipeline.execute = AsyncMock(side_effect=[
-        [None, 0, None, None],  # First request: zcard=0 → allowed
-        [None, 1, None, None],  # Second request: zcard=1 → still < 5
-    ])
+    pipeline.execute = AsyncMock(
+        side_effect=[
+            [None, 0, None, None],  # First request: zcard=0 → allowed
+            [None, 1, None, None],  # Second request: zcard=1 → still < 5
+        ]
+    )
     redis.pipeline.return_value = pipeline
     result = await _check_redis_limit(redis, "ratelimit:user1:generate", 5, 60)
     assert result is True
@@ -100,10 +102,9 @@ async def test_rate_limit_graceful_on_redis_error():
     redis = MagicMock()
     redis.pipeline.side_effect = Exception("Connection refused")
 
-    with patch(
-        "backend.middleware.rate_limit.settings.environment", "production"
-    ), patch(
-        "backend.middleware.rate_limit.Redis.from_url", return_value=redis
+    with (
+        patch("backend.middleware.rate_limit.settings.environment", "production"),
+        patch("backend.middleware.rate_limit.Redis.from_url", return_value=redis),
     ):
         middleware = RateLimitMiddleware(app)
         middleware._enabled = True

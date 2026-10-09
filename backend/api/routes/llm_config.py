@@ -33,15 +33,11 @@ router = APIRouter(prefix="", tags=["llm-config"])
 class LLMConfigCreate(BaseModel):
     """Request to create a new LLM configuration."""
 
-    provider: str = Field(
-        description="Provider slug: openai, anthropic, ollama, custom"
-    )
+    provider: str = Field(description="Provider slug: openai, anthropic, ollama, custom")
     base_url: str | None = Field(
         default=None, description="Custom base URL for Ollama or custom providers"
     )
-    api_key: str | None = Field(
-        default=None, description="API key (will be encrypted at rest)"
-    )
+    api_key: str | None = Field(default=None, description="API key (will be encrypted at rest)")
     model_name: str = Field(description="Model identifier, e.g., gpt-4o-mini, llama3.1:70b")
     is_active: bool = Field(
         default=True, description="Whether this is the active config for generation"
@@ -71,7 +67,7 @@ class LLMConfigResponse(BaseModel):
     updated_at: str
 
     @classmethod
-    def from_model(cls, config: LLMConfig) -> "LLMConfigResponse":
+    def from_model(cls, config: LLMConfig) -> LLMConfigResponse:
         return cls(
             id=str(config.id),
             provider=config.provider,
@@ -111,7 +107,11 @@ async def list_llm_configs(
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> list[LLMConfigResponse]:
     """List all LLM configurations for the current user."""
-    stmt = select(LLMConfig).where(LLMConfig.user_id == current_user_id).order_by(LLMConfig.created_at.desc())
+    stmt = (
+        select(LLMConfig)
+        .where(LLMConfig.user_id == current_user_id)
+        .order_by(LLMConfig.created_at.desc())
+    )
     result = await session.execute(stmt)
     configs = result.scalars().all()
     return [LLMConfigResponse.from_model(c) for c in configs]
@@ -158,6 +158,7 @@ async def create_llm_config(
 
 class OllamaModel(BaseModel):
     """A single model returned by Ollama's /api/tags."""
+
     name: str
     model: str
     modified_at: str | None = None
@@ -168,6 +169,7 @@ class OllamaModel(BaseModel):
 
 class OllamaModelsResponse(BaseModel):
     """Response from the Ollama models endpoint."""
+
     models: list[OllamaModel]
 
 
@@ -187,12 +189,9 @@ async def list_ollama_models() -> OllamaModelsResponse:
             r.raise_for_status()
             data = r.json()
             raw_models = data.get("models", [])
-            return OllamaModelsResponse(
-                models=[OllamaModel(**m) for m in raw_models]
-            )
+            return OllamaModelsResponse(models=[OllamaModel(**m) for m in raw_models])
     except Exception:
         return OllamaModelsResponse(models=[])
-
 
 
 @router.get("/{config_id}", response_model=LLMConfigResponse)
@@ -281,7 +280,6 @@ async def test_llm_config(
     import time
 
     from backend.llm.adapter import GenerationError, get_adapter_class
-    from backend.llm.adapters import LiteLLMAdapter, OllamaAdapter, OpenAIAdapter
 
     stmt = select(LLMConfig).where(LLMConfig.id == config_id, LLMConfig.user_id == current_user_id)
     result = await session.execute(stmt)

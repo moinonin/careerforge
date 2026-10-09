@@ -34,9 +34,7 @@ async def signup(
     full_name: str | None,
 ) -> models.User:
     """Register a new user, hash the password, and initialize the 14-day trial."""
-    existing = await session.execute(
-        select(models.User).where(models.User.email == email)
-    )
+    existing = await session.execute(select(models.User).where(models.User.email == email))
     if existing.scalar_one_or_none() is not None:
         raise ValueError("A user with this email already exists")
 
@@ -201,9 +199,7 @@ async def update_user_me(
     if full_name is not None:
         user.full_name = full_name
     if email is not None and email != user.email:
-        existing = await session.execute(
-            select(models.User).where(models.User.email == email)
-        )
+        existing = await session.execute(select(models.User).where(models.User.email == email))
         if existing.scalar_one_or_none() is not None:
             raise ValueError("Email already in use")
         user.email = email
@@ -228,9 +224,7 @@ async def initiate_password_reset(
     email itself (email is disabled in development).  Returns empty string
     if the email is not found (so the caller can emit a generic message).
     """
-    result = await session.execute(
-        select(models.User).where(models.User.email == email)
-    )
+    result = await session.execute(select(models.User).where(models.User.email == email))
     user = result.scalar_one_or_none()
     if user is None:
         return ""
@@ -248,9 +242,7 @@ async def reset_password(
     if payload.get("sub") != user_id:
         raise ValueError("Reset token is not valid for this user")
 
-    result = await session.execute(
-        select(models.User).where(models.User.id == user_id)
-    )
+    result = await session.execute(select(models.User).where(models.User.id == user_id))
     user = result.scalar_one_or_none()
     if user is None:
         raise ValueError("User not found")

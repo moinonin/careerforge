@@ -8,6 +8,7 @@ ENV_FILE = BASE_DIR / ".env"
 if os.environ.get("CAREERFORGE_SKIP_DOTENV") is None:
     try:
         from dotenv import load_dotenv
+
         load_dotenv(ENV_FILE, override=False)
     except ImportError:  # pragma: no cover — only when run outside venv
         pass

@@ -36,9 +36,7 @@ async def init_db() -> None:
         pool_size=5,
         max_overflow=10,
     )
-    _session_factory = async_sessionmaker(
-        engine, class_=AsyncSession
-    )
+    _session_factory = async_sessionmaker(engine, class_=AsyncSession)
 
 
 async def shutdown_db() -> None:

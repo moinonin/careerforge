@@ -8,7 +8,6 @@ Selects adapter from:
 from __future__ import annotations
 
 import os
-from typing import Any
 
 from backend.llm.adapter import _ADAPTERS, LLMAdapter
 from backend.llm.adapters import (  # noqa: F401  (registers adapters)
@@ -65,9 +64,7 @@ def build_adapter(
     cls = _ADAPTERS.get(provider_slug)
     if cls is None:
         known = ", ".join(sorted(_ADAPTERS.keys()))
-        raise ValueError(
-            f"Unknown LLM provider '{provider_slug}'. Known providers: {known}"
-        )
+        raise ValueError(f"Unknown LLM provider '{provider_slug}'. Known providers: {known}")
 
     return cls(
         api_key=api_key,
@@ -94,7 +91,9 @@ async def build_adapter_from_config(
         if config:
             provider_slug = config.provider
             model = config.model_name
-            api_key = decrypt_api_key(config.api_key_encrypted) if config.api_key_encrypted else None
+            api_key = (
+                decrypt_api_key(config.api_key_encrypted) if config.api_key_encrypted else None
+            )
             base_url = config.base_url
         else:
             # Fallback to env
@@ -105,7 +104,9 @@ async def build_adapter_from_config(
         # Explicit provider requested - still try to get config if it matches
         config = await get_user_active_config(session, user_id)
         if config and config.provider == provider_slug:
-            api_key = decrypt_api_key(config.api_key_encrypted) if config.api_key_encrypted else None
+            api_key = (
+                decrypt_api_key(config.api_key_encrypted) if config.api_key_encrypted else None
+            )
             base_url = config.base_url
             if model is None:
                 model = config.model_name

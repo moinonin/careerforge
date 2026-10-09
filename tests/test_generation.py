@@ -20,12 +20,10 @@ import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from backend.database import get_session
-
 from backend.llm.adapter import GenerationError, LLMAdapter
-from backend.database import get_session
+from backend.llm.docx_renderer import CoverLetterDocxRenderer, DocxRenderer
 from backend.main import app
 from fastapi.testclient import TestClient
-from backend.llm.docx_renderer import DocxRenderer, CoverLetterDocxRenderer
 
 # ── Canned LLM output ─────────────────────────────────────────────────────────
 
@@ -138,12 +136,12 @@ def _make_client() -> TestClient:
     """Client with mocked DB session + auth (returns FAKE_USER_ID)."""
     app.dependency_overrides.clear()
     from backend.auth.schemas import get_current_user_id
-    from backend.database import get_session
 
     fake_profile = _make_fake_profile(FAKE_USER_ID, FAKE_PROFILE_ID)
 
     async def _mock_get_session():
         session = AsyncMock()
+
         # The route runs: result = await session.execute(stmt)
         # followed by: profile = result.scalar_one_or_none()
         # Assign a fixed async function so session.execute is stable.
@@ -152,6 +150,7 @@ def _make_client() -> TestClient:
             result.scalar_or_none.return_value = fake_profile
             result.scalar_one_or_none.return_value = fake_profile
             return result
+
         session.execute = _execute
         session.commit = AsyncMock()  # await session.commit() must work
         session.refresh = AsyncMock()  # await session.refresh(job) must work
@@ -172,15 +171,16 @@ def _make_unauth_client() -> TestClient:
     401.
     """
     app.dependency_overrides.clear()
-    from backend.database import get_session
 
     async def _mock_get_session():
         session = AsyncMock()
+
         async def _execute(stmt):
             result = MagicMock()
             result.scalar_or_none.return_value = None
             result.scalar_one_or_none.return_value = None
             return result
+
         session.execute = _execute
         return session
 
@@ -237,7 +237,7 @@ def _patch_all():
     async def _mark_processing(*args, **kwargs):
         return None
 
-    async def _run_gen(session, job, *, provider=None, model=None):
+    async def _run_gen(session, job, *, provider=None, model=None, jev_context=None):
         return (MOCK_CV, MOCK_COVER_LETTER)
 
     started[0].side_effect = _create_job
@@ -248,7 +248,7 @@ def _patch_all():
     started[7].side_effect = _run_gen
     started[5].return_value = "# CV\n\nJane Doe\n\nSenior backend engineer..."
     started[6].return_value = "# Cover Letter\n\nDear Hiring Manager,\n\nI am writing..."
-    started[8].return_value = fake_job.at_score
+    started[8].return_value = (fake_job.at_score, [])
 
     return fake_profile, fake_job, started
 
@@ -352,12 +352,12 @@ def test_generate_missing_job_description_returns_400():
 
 def test_get_job_not_found_returns_404():
     client = _make_client()
+
     # Patch get_job to return None (job not found)
     async def _get_job_none(session, job_id, user_id):
         return None
-    get_job_patch = patch(
-        "backend.api.routes.generate.get_job", side_effect=_get_job_none
-    )
+
+    get_job_patch = patch("backend.api.routes.generate.get_job", side_effect=_get_job_none)
     get_job_patch.start()
     try:
         response = client.get("/api/v1/generate/jobs/does-not-exist")
@@ -367,6 +367,7 @@ def test_get_job_not_found_returns_404():
 
 
 # ── Validation & retry tests ─────────────────────────────────────────────────
+
 
 def _bad_cv_skills_as_list() -> dict:
     """CV where skills is a list instead of the required object — should fail."""
@@ -501,7 +502,7 @@ def test_cover_letter_validation_accepts_valid():
 def test_combined_schema_detects_cv_and_cl():
     """The combined schema (cv + cover_letter wrapper) is detected correctly."""
     from backend.llm.adapter import _detect_schema_type
-    from backend.llm.prompts import CV_SCHEMA, COVER_LETTER_SCHEMA
+    from backend.llm.prompts import COVER_LETTER_SCHEMA, CV_SCHEMA
 
     combined = {
         "type": "object",
@@ -556,15 +557,17 @@ def test_output_models_allow_extra_fields():
     don't break validation."""
     from backend.llm.output_models import cv_output_from_dict
 
-    cv = cv_output_from_dict({
-        "contact": {"full_name": "Jane", "location": "SF"},
-        "summary": "Hi",
-        "skills": {"technical": [], "domain": [], "tools": [], "soft": []},
-        "experience": [],
-        "education": [],
-        # Extra field not in schema — should be ignored, not rejected
-        "some_extra_field": "should be ignored",
-    })
+    cv = cv_output_from_dict(
+        {
+            "contact": {"full_name": "Jane", "location": "SF"},
+            "summary": "Hi",
+            "skills": {"technical": [], "domain": [], "tools": [], "soft": []},
+            "experience": [],
+            "education": [],
+            # Extra field not in schema — should be ignored, not rejected
+            "some_extra_field": "should be ignored",
+        }
+    )
     assert cv.summary == "Hi"
     assert not hasattr(cv, "some_extra_field")
 
@@ -617,7 +620,12 @@ CV_DOCX_TEST_DATA = {
     ],
     "languages": [{"language": "English", "proficiency": "Native"}],
     "projects": [
-        {"name": "OpenAudit", "description": "Audit log framework.", "tech_stack": ["Python"], "link": "https://github.com/example"},
+        {
+            "name": "OpenAudit",
+            "description": "Audit log framework.",
+            "tech_stack": ["Python"],
+            "link": "https://github.com/example",
+        },
     ],
     "additional_info": "Volunteer mentor at CodePath.org.",
 }
@@ -636,13 +644,14 @@ CL_DOCX_TEST_DATA = {
 def _get_paragraph_texts(docx_path: str) -> list[str]:
     """Return non-empty paragraph texts from a .docx file."""
     from docx import Document as Reader
+
     return [p.text for p in Reader(docx_path).paragraphs if p.text.strip()]
 
 
 def test_docx_renderer_cv_has_name_header():
     """CV docx starts with the candidate name as a large bold heading."""
-    import tempfile, os
-    from backend.llm.docx_renderer import DocxRenderer
+    import os
+    import tempfile
 
     with tempfile.TemporaryDirectory() as tmp:
         path = os.path.join(tmp, "cv.docx")
@@ -654,8 +663,8 @@ def test_docx_renderer_cv_has_name_header():
 
 def test_docx_renderer_cv_has_all_required_sections():
     """CV docx contains all required ATS sections."""
-    import tempfile, os
-    from backend.llm.docx_renderer import DocxRenderer
+    import os
+    import tempfile
 
     with tempfile.TemporaryDirectory() as tmp:
         path = os.path.join(tmp, "cv.docx")
@@ -674,8 +683,9 @@ def test_docx_renderer_cv_has_all_required_sections():
 
 def test_docx_renderer_cv_experience_uses_bold_role_line():
     """Experience entries render role+company on a bold line."""
-    import tempfile, os
-    from backend.llm.docx_renderer import DocxRenderer
+    import os
+    import tempfile
+
     from docx import Document as Reader
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -695,8 +705,9 @@ def test_docx_renderer_cv_experience_uses_bold_role_line():
 
 def test_docx_renderer_cv_relevance_note_is_italic():
     """Relevance notes render as italic indented paragraphs."""
-    import tempfile, os
-    from backend.llm.docx_renderer import DocxRenderer
+    import os
+    import tempfile
+
     from docx import Document as Reader
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -713,8 +724,8 @@ def test_docx_renderer_cv_relevance_note_is_italic():
 
 def test_docx_renderer_cv_skills_are_grouped():
     """Skills render under Core Competencies with group labels."""
-    import tempfile, os
-    from backend.llm.docx_renderer import DocxRenderer
+    import os
+    import tempfile
 
     with tempfile.TemporaryDirectory() as tmp:
         path = os.path.join(tmp, "cv.docx")
@@ -728,8 +739,8 @@ def test_docx_renderer_cv_skills_are_grouped():
 
 def test_docx_renderer_cv_missing_sections_are_omitted():
     """CV sections with no data are not rendered as headings."""
-    import tempfile, os
-    from backend.llm.docx_renderer import DocxRenderer
+    import os
+    import tempfile
 
     minimal_cv = {
         "contact": {"full_name": "Jane", "location": "SF"},
@@ -751,8 +762,13 @@ def test_docx_renderer_cv_missing_sections_are_omitted():
     assert texts[0] == "Jane"
     assert "Professional Summary" in texts
     section_headings = [
-        "Core Competencies", "Professional Experience", "Education",
-        "Publications", "Certifications", "Languages", "Projects",
+        "Core Competencies",
+        "Professional Experience",
+        "Education",
+        "Publications",
+        "Certifications",
+        "Languages",
+        "Projects",
         "Additional Information",
     ]
     for h in section_headings:
@@ -761,8 +777,8 @@ def test_docx_renderer_cv_missing_sections_are_omitted():
 
 def test_docx_renderer_cv_dates_show_present_for_current_role():
     """Current role (end_date='Present') shows ' – Present' in dates."""
-    import tempfile, os
-    from backend.llm.docx_renderer import DocxRenderer
+    import os
+    import tempfile
 
     cv = {
         "contact": {"full_name": "Jane", "location": "SF"},
@@ -794,9 +810,10 @@ def test_docx_renderer_cv_dates_show_present_for_current_role():
 
 def test_docx_renderer_cv_page_size_a4():
     """A4 page size renders with A4 dimensions."""
-    import tempfile, os
+    import os
+    import tempfile
+
     from backend.config import Settings
-    from backend.llm.docx_renderer import DocxRenderer
     from docx import Document as Reader
 
     a4_settings = Settings()
@@ -826,8 +843,8 @@ def test_docx_renderer_cv_page_size_a4():
 
 def test_docx_renderer_cover_letter_has_all_parts():
     """Cover letter docx contains header, salutation, body, closing, signature."""
-    import tempfile, os
-    from backend.llm.docx_renderer import CoverLetterDocxRenderer
+    import os
+    import tempfile
 
     with tempfile.TemporaryDirectory() as tmp:
         path = os.path.join(tmp, "cl.docx")
@@ -844,8 +861,8 @@ def test_docx_renderer_cover_letter_has_all_parts():
 
 def test_docx_renderer_empty_cv_produces_valid_docx():
     """Even a CV with only a name produces a valid (non-empty) .docx."""
-    import tempfile, os
-    from backend.llm.docx_renderer import DocxRenderer
+    import os
+    import tempfile
 
     cv = {
         "contact": {"full_name": "Jane Doe", "location": "SF"},
@@ -867,6 +884,7 @@ def test_docx_renderer_empty_cv_produces_valid_docx():
 
 
 # ── DOCX download endpoint integration test ────────────────────────────────────
+
 
 def _make_test_cv() -> dict:
     """Full CV dict for endpoint integration tests."""
@@ -934,7 +952,8 @@ def _make_test_client():
     import asyncio
     import shutil
     import tempfile
-    from unittest.mock import AsyncMock as _AM, patch as _patch
+    from unittest.mock import AsyncMock as _AM
+    from unittest.mock import patch as _patch
 
     # Stop any patches from previous tests that may have leaked
     _patch.stopall()
@@ -949,9 +968,9 @@ def _make_test_client():
     artifacts_patch.start()
 
     # Now import modules that depend on settings
-    from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
     from backend.database import Base
     from backend.main import create_app
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
     # Create engine and session factory manually for SQLite (no pool args)
     test_engine = create_async_engine(
@@ -959,10 +978,13 @@ def _make_test_client():
         echo=False,
         pool_pre_ping=True,
     )
-    test_session_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    test_session_factory = async_sessionmaker(
+        test_engine, class_=AsyncSession, expire_on_commit=False
+    )
 
     # Patch the database module's globals
     import backend.database as db_module
+
     db_module.engine = test_engine
     db_module._session_factory = test_session_factory
 
@@ -970,6 +992,7 @@ def _make_test_client():
     async def _init_tables():
         async with test_engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+
     asyncio.run(_init_tables())
 
     # Define the real_get_session using our test factory
@@ -983,10 +1006,12 @@ def _make_test_client():
                 raise
 
     resume_adapter = _AM()
-    resume_adapter.generate = _AM(return_value={
-        "cv": _make_test_cv(),
-        "cover_letter": _make_test_cl(),
-    })
+    resume_adapter.generate = _AM(
+        return_value={
+            "cv": _make_test_cv(),
+            "cover_letter": _make_test_cl(),
+        }
+    )
 
     # Patch build_adapter at the SERVICE layer so run_generation uses our mock
     build_adapter_patch = _patch("backend.llm.service.build_adapter", return_value=resume_adapter)
@@ -1008,9 +1033,10 @@ def _make_test_client():
 
     # Seed a user and profile in the real DB
     async def _seed_profile():
-        from backend.models import MasterProfile, User
+
         from backend.auth.jwt_utils import hash_password
-        import json
+        from backend.models import MasterProfile, User
+
         async for session in real_get_session():
             user = User(
                 id=FAKE_USER_ID,
@@ -1063,13 +1089,11 @@ def _make_test_client():
 
 def _make_test_client_failed():
     """Client with mocked DB session + auth + settings + a failing adapter."""
-    import asyncio
     import shutil
-    from unittest.mock import AsyncMock as _AM, patch as _patch
+    from unittest.mock import AsyncMock as _AM
+    from unittest.mock import patch as _patch
 
-    from backend.database import init_db
     from backend.main import create_app
-    from backend.models import GenerationJob
 
     os.environ["CAREERFORGE__DATABASE__URL"] = "sqlite+aiosqlite:///:memory:"
     os.environ["LLM_PROVIDER"] = "openai"
@@ -1098,10 +1122,11 @@ def _make_test_client_failed():
 
     async def _mock_get_session():
         session = _AM()
+
         async def _execute(stmt):
             result = MagicMock()
-            result.scalar_or_none.return_value = _profile_store.get("profile", None)
-            result.scalar_one_or_none.return_value = _profile_store.get("profile", None)
+            result.scalar_or_none.return_value = _profile_store.get("profile")
+            result.scalar_one_or_none.return_value = _profile_store.get("profile")
             result.scalars.return_value = MagicMock()
             result.all.return_value = []
             result.first.return_value = None
@@ -1112,6 +1137,7 @@ def _make_test_client_failed():
             result.rowcount = 1
             result.inserted_primary_key = [FAKE_USER_ID]
             return result
+
         session.execute = _execute
         session.commit = _AM()
         session.refresh = _AM()
@@ -1180,9 +1206,10 @@ def test_generation_endpoint_renders_and_stores_docx_file():
         assert resp.status_code == 202, resp.text
 
         import asyncio
-        from sqlalchemy import select
-        from backend.models import GenerationJob
+
         import backend.database as db_module
+        from backend.models import GenerationJob
+        from sqlalchemy import select
 
         async def _check_db():
             test_engine = db_module.engine
@@ -1194,8 +1221,12 @@ def test_generation_endpoint_renders_and_stores_docx_file():
                 assert row is not None, "No job row found in DB"
                 # row is a Row object with attribute access
                 assert row.status == "completed"
-                assert row.cv_docx_url.endswith("_cv.docx"), f"Unexpected cv path: {row.cv_docx_url}"
-                assert row.cl_docx_url.endswith("_cover_letter.docx"), f"Unexpected cl path: {row.cl_docx_url}"
+                assert row.cv_docx_url.endswith("_cv.docx"), (
+                    f"Unexpected cv path: {row.cv_docx_url}"
+                )
+                assert row.cl_docx_url.endswith("_cover_letter.docx"), (
+                    f"Unexpected cl path: {row.cl_docx_url}"
+                )
                 assert os.path.isfile(row.cv_docx_url), f"CV docx not found: {row.cv_docx_url}"
                 assert os.path.isfile(row.cl_docx_url), f"CL docx not found: {row.cl_docx_url}"
                 cv_size = os.path.getsize(row.cv_docx_url)
@@ -1226,7 +1257,10 @@ def test_generation_endpoint_cv_download_endpoint_serves_docx():
         # Same client has the auth override — reuse it
         dl_resp = client.get(f"/api/v1/generate/jobs/{job_id}/cv")
         assert dl_resp.status_code == 200, dl_resp.text
-        assert dl_resp.headers["content-type"] == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        assert (
+            dl_resp.headers["content-type"]
+            == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
         assert dl_resp.headers["content-disposition"].startswith("attachment; filename=")
         assert len(dl_resp.content) > 1000
     finally:
@@ -1251,7 +1285,10 @@ def test_generation_endpoint_cl_download_endpoint_serves_docx():
         # Same client has the auth override — reuse it
         dl_resp = client.get(f"/api/v1/generate/jobs/{job_id}/cover-letter")
         assert dl_resp.status_code == 200, dl_resp.text
-        assert dl_resp.headers["content-type"] == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        assert (
+            dl_resp.headers["content-type"]
+            == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
         assert dl_resp.headers["content-disposition"].startswith("attachment; filename=")
         assert len(dl_resp.content) > 1000
     finally:
@@ -1308,5 +1345,3 @@ def test_generation_endpoint_job_not_completed_returns_404_on_download():
     # Use the same client (has auth override) to check a non-existent job
     dl_resp = client.get("/api/v1/generate/jobs/does-not-exist/cv")
     assert dl_resp.status_code == 409, dl_resp.text
-
-

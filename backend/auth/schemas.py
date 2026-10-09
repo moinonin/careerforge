@@ -41,6 +41,7 @@ CurrentUserId = Annotated[str, Depends(get_current_user_id)]
 
 # ── Auth request/response schemas ────────────────────────────────────────────
 
+
 class SignupRequest(BaseModel):
     email: EmailStr
     password: str

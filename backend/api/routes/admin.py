@@ -4,13 +4,12 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select, func
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from backend.auth.schemas import CurrentUserId
 from backend.database import get_session
-from backend.models import User, GenerationJob, GenerationMetric
+from backend.models import GenerationJob, GenerationMetric, User
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
 
@@ -42,12 +41,7 @@ async def admin_user_list(
     total_result = await session.execute(count_stmt)
     total = total_result.scalar_one()
 
-    stmt = (
-        select(User)
-        .order_by(User.created_at.desc())
-        .offset(offset)
-        .limit(page_size)
-    )
+    stmt = select(User).order_by(User.created_at.desc()).offset(offset).limit(page_size)
     result = await session.execute(stmt)
     users = result.scalars().all()
 
@@ -93,11 +87,7 @@ async def admin_generation_log(
     total_result = await session.execute(count_stmt)
     total = total_result.scalar_one()
 
-    stmt = (
-        stmt.order_by(GenerationJob.created_at.desc())
-        .offset(offset)
-        .limit(page_size)
-    )
+    stmt = stmt.order_by(GenerationJob.created_at.desc()).offset(offset).limit(page_size)
     result = await session.execute(stmt)
     jobs = result.scalars().all()
 

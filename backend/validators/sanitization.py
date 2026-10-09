@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import re
 
-
 # Characters allowed after stripping control chars: printable ASCII + common Unicode
 _CONTROL_CHAR_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
 _HTML_TAG_RE = re.compile(r"<[^>]*>")
@@ -53,10 +52,7 @@ def sanitize_profile_data(profile_data: dict) -> dict:
         if isinstance(value, str):
             result[key] = sanitize_text(value)
         elif isinstance(value, list):
-            result[key] = [
-                sanitize_text(item) if isinstance(item, str) else item
-                for item in value
-            ]
+            result[key] = [sanitize_text(item) if isinstance(item, str) else item for item in value]
         elif isinstance(value, dict):
             result[key] = sanitize_profile_data(value)
         else:
@@ -67,6 +63,4 @@ def sanitize_profile_data(profile_data: dict) -> dict:
 def validate_length(text: str, field_name: str, max_len: int = 10_000) -> None:
     """Raise ValueError if text exceeds max_len."""
     if len(text) > max_len:
-        raise ValueError(
-            f"{field_name} exceeds maximum length of {max_len} characters"
-        )
+        raise ValueError(f"{field_name} exceeds maximum length of {max_len} characters")

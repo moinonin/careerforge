@@ -155,10 +155,20 @@ class ProfileSectionPatchRequest(BaseModel):
 
 # ── Section name enum ────────────────────────────────────────────────────────
 
-VALID_SECTIONS: frozenset[str] = frozenset({
-    "contact", "summary", "education", "experience", "skills",
-    "publications", "certifications", "languages", "projects", "additional_info",
-})
+VALID_SECTIONS: frozenset[str] = frozenset(
+    {
+        "contact",
+        "summary",
+        "education",
+        "experience",
+        "skills",
+        "publications",
+        "certifications",
+        "languages",
+        "projects",
+        "additional_info",
+    }
+)
 
 
 def is_valid_section(name: str) -> bool:
@@ -197,11 +207,15 @@ def compute_completeness(data: MasterProfileData | dict[str, Any]) -> int:
         score += 25
 
     edu_list = _list_of(data, "education")
-    if edu_list and any(_str_of(e, "degree").strip() and _str_of(e, "institution").strip() for e in edu_list):
+    if edu_list and any(
+        _str_of(e, "degree").strip() and _str_of(e, "institution").strip() for e in edu_list
+    ):
         score += 25
 
     exp_list = _list_of(data, "experience")
-    if exp_list and any(_str_of(e, "role").strip() and _str_of(e, "company").strip() for e in exp_list):
+    if exp_list and any(
+        _str_of(e, "role").strip() and _str_of(e, "company").strip() for e in exp_list
+    ):
         score += 25
 
     skills = data.skills if isinstance(data, MasterProfileData) else data.get("skills", {})

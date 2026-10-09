@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from starlette.types import ASGIApp, Scope, Receive, Send
-
-from backend.config import settings
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 
 class ErrorHandlerMiddleware:
@@ -38,7 +36,7 @@ class ErrorHandlerMiddleware:
 
         try:
             await self.app(scope, receive, wrapped_send)
-        except Exception as exc:
+        except Exception:
             if not _error_sent:
                 _error_sent = True
                 await self._send_error_page(send, 500, "500")
@@ -49,26 +47,29 @@ class ErrorHandlerMiddleware:
 
         error_dir = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "templates", "errors",
+            "templates",
+            "errors",
         )
         error_file = os.path.join(error_dir, f"{status_code}.html")
 
         if os.path.exists(error_file):
-            with open(error_file, "r") as f:
+            with open(error_file) as f:
                 html = f.read()
         else:
             html = f"<html><body><h1>{title}</h1></body></html>"
 
         body = html.encode("utf-8")
         try:
-            await send({
-                "type": "http.response.start",
-                "status": status_code,
-                "headers": [
-                    (b"content-type", b"text/html; charset=utf-8"),
-                    (b"content-length", str(len(body)).encode()),
-                ],
-            })
+            await send(
+                {
+                    "type": "http.response.start",
+                    "status": status_code,
+                    "headers": [
+                        (b"content-type", b"text/html; charset=utf-8"),
+                        (b"content-length", str(len(body)).encode()),
+                    ],
+                }
+            )
             await send({"type": "http.response.body", "body": body})
         except Exception:
             pass  # Client disconnected; error page cannot be sent

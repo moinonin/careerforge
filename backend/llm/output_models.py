@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 # ── Output models (LLM response validation) ──────────────────────────────────
 
+
 class ContactOutput(BaseModel):
     model_config = ConfigDict(extra="ignore")
 

@@ -32,9 +32,6 @@ class _ParsedSection(BaseModel):
     confidence_flags: dict[str, str] = {}
 
 
-
-
-
 def parse_cv(file_bytes: bytes, filename: str) -> _ParsedSection:
     """Parse a CV file (DOCX or PDF) using pymupdf extraction.
 
@@ -50,15 +47,28 @@ def parse_cv(file_bytes: bytes, filename: str) -> _ParsedSection:
     _ParsedSection
         Extracted data with confidence flags.
     """
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if ext not in ("pdf", "docx"):
+        return _ParsedSection(
+            confidence_flags={
+                "contact": "unsupported_format",
+                "education": "unsupported_format",
+                "experience": "unsupported_format",
+                "skills": "unsupported_format",
+            }
+        )
+
     text = extract_text(file_bytes, filename)
 
     if not text.strip():
-        return _ParsedSection(confidence_flags={
-            "contact": "empty_text",
-            "education": "empty_text",
-            "experience": "empty_text",
-            "skills": "empty_text",
-        })
+        return _ParsedSection(
+            confidence_flags={
+                "contact": "empty_text",
+                "education": "empty_text",
+                "experience": "empty_text",
+                "skills": "empty_text",
+            }
+        )
 
     return _parse_text(text)
 
@@ -84,7 +94,9 @@ def _parse_text(text: str) -> _ParsedSection:
     # Section heading patterns (case-insensitive)
     section_patterns: dict[str, re.Pattern] = {
         "education": re.compile(r"^\s*(education|qualifications)\s*$", re.I),
-        "experience": re.compile(r"^\s*(experience|work\s*history|professional\s*experience)\s*$", re.I),
+        "experience": re.compile(
+            r"^\s*(experience|work\s*history|professional\s*experience)\s*$", re.I
+        ),
         "skills": re.compile(r"^\s*(skills|technical\s*skills)\s*$", re.I),
         "publications": re.compile(r"^\s*(publications|research)\s*$", re.I),
         "certifications": re.compile(r"^\s*(certifications|certificates|licenses)\s*$", re.I),
@@ -125,7 +137,11 @@ def _parse_text(text: str) -> _ParsedSection:
             flags.setdefault("contact", "partial")
 
         phone_match = re.search(r"\+?[\d\s\-\(\)]{7,20}", line)
-        if phone_match and not result.contact.get("phone") and len(phone_match.group(0).strip()) > 7:
+        if (
+            phone_match
+            and not result.contact.get("phone")
+            and len(phone_match.group(0).strip()) > 7
+        ):
             result.contact["phone"] = phone_match.group(0).strip()
 
         linkedin_match = re.search(r"(linkedin\.com/in/[A-Za-z0-9_-]+)", line, re.I)
@@ -136,10 +152,15 @@ def _parse_text(text: str) -> _ParsedSection:
     # that doesn't contain @ or digits and isn't a section header
     for line in lines[:20]:
         stripped = line.strip()
-        if (stripped and len(stripped) > 2 and len(stripped) < 100
-                and "@" not in stripped and not re.match(r"^\d+$", stripped)
-                and not any(p.match(stripped) for p in section_patterns.values())
-                and not result.contact.get("full_name")):
+        if (
+            stripped
+            and len(stripped) > 2
+            and len(stripped) < 100
+            and "@" not in stripped
+            and not re.match(r"^\d+$", stripped)
+            and not any(p.match(stripped) for p in section_patterns.values())
+            and not result.contact.get("full_name")
+        ):
             result.contact["full_name"] = stripped
             flags.setdefault("contact", "partial")
             break
@@ -170,7 +191,12 @@ def _process_section(
             # Look for degree patterns: "MBA, Stanford, 2020" or "BSc Computer Science"
             parts = [p.strip() for p in line.split(",") if p.strip()]
             if parts:
-                entry: dict[str, Any] = {"degree": parts[0], "institution": "", "start_date": "", "end_date": ""}
+                entry: dict[str, Any] = {
+                    "degree": parts[0],
+                    "institution": "",
+                    "start_date": "",
+                    "end_date": "",
+                }
                 if len(parts) >= 2:
                     entry["institution"] = parts[1]
                 result.education.append(entry)
@@ -180,7 +206,14 @@ def _process_section(
             # Look for role/company patterns: "Software Engineer at Google, 2020-2022"
             parts = [p.strip() for p in re.split(r"[,;]", line) if p.strip()]
             if parts:
-                entry: dict[str, Any] = {"role": parts[0], "company": "", "location": "", "start_date": "", "end_date": "", "bullets": []}
+                entry: dict[str, Any] = {
+                    "role": parts[0],
+                    "company": "",
+                    "location": "",
+                    "start_date": "",
+                    "end_date": "",
+                    "bullets": [],
+                }
                 if len(parts) >= 2:
                     entry["company"] = parts[1]
                 result.experience.append(entry)
@@ -195,7 +228,18 @@ def _process_section(
                     # Categorize: long words are tools, short words are skills
                     if len(item) <= 3 and item.isalpha():
                         result.skills["soft"].append(item)
-                    elif item.lower() in ("python", "java", "go", "rust", "react", "node", "docker", "k8s", "aws", "gcp"):
+                    elif item.lower() in (
+                        "python",
+                        "java",
+                        "go",
+                        "rust",
+                        "react",
+                        "node",
+                        "docker",
+                        "k8s",
+                        "aws",
+                        "gcp",
+                    ):
                         result.skills["tools"].append(item)
                     else:
                         result.skills["technical"].append(item)
@@ -223,6 +267,7 @@ def _process_section(
 
 # ── pymupdf-based extraction (better quality) ──────────────────────────
 
+
 def extract_text(file_bytes: bytes, filename: str) -> str:
     """Extract plain text from a PDF or DOCX file using pymupdf.
 
@@ -241,6 +286,7 @@ def extract_text(file_bytes: bytes, filename: str) -> str:
 def _extract_pdf_pymupdf(file_bytes: bytes) -> str:
     """Extract text from PDF using pymupdf."""
     import pymupdf
+
     doc = pymupdf.open(stream=file_bytes, filetype="pdf")
     pages: list[str] = []
     for page in doc:
@@ -254,6 +300,7 @@ def _extract_pdf_pymupdf(file_bytes: bytes) -> str:
 def _extract_docx(file_bytes: bytes) -> str:
     """Extract text from DOCX."""
     from docx import Document
+
     doc = Document(io.BytesIO(file_bytes))
     paragraphs = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
     return "\n".join(paragraphs)

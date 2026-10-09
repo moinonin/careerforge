@@ -19,10 +19,10 @@ import stripe
 from backend.auth.schemas import CurrentUserId
 from backend.config import settings
 from backend.database import get_session
-from backend.models import CreditPackage, Subscription, User, GenerationJob, UserCredit
+from backend.models import CreditPackage, GenerationJob, Subscription, User, UserCredit
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(tags=["billing"])
@@ -32,6 +32,7 @@ stripe_client = stripe.StripeClient(api_key=settings.stripe_secret_key or "")
 
 
 # ── Request / Response schemas ──────────────────────────────────────
+
 
 class CheckoutSessionRequest(BaseModel):
     """Request body for ``POST /api/v1/billing/checkout-session``."""
@@ -59,6 +60,7 @@ class SubscriptionResponse(BaseModel):
 
 # ── Checkout ────────────────────────────────────────────────────────
 
+
 @router.post(
     "/checkout-session",
     response_model=CheckoutResponse,
@@ -85,22 +87,16 @@ async def create_checkout_session(
         )
 
     if request.type == "subscription_individual":
-        return await _create_subscription_checkout(
-            "individual", user_id, session
-        )
+        return await _create_subscription_checkout("individual", user_id, session)
     elif request.type == "subscription_team":
-        return await _create_subscription_checkout(
-            "team", user_id, session
-        )
+        return await _create_subscription_checkout("team", user_id, session)
     elif request.type == "credit_bundle":
         if not request.credit_package_id:
             raise HTTPException(
                 status_code=400,
                 detail="credit_package_id required for credit_bundle type",
             )
-        return await _create_credit_bundle_checkout(
-            request.credit_package_id, user_id, session
-        )
+        return await _create_credit_bundle_checkout(request.credit_package_id, user_id, session)
     else:
         raise HTTPException(
             status_code=400,
@@ -219,6 +215,7 @@ async def _create_credit_bundle_checkout(
 
 # ── Webhook ─────────────────────────────────────────────────────────
 
+
 @router.post("/webhook")
 async def stripe_webhook(request_body: bytes) -> dict:
     """Stripe webhook endpoint.
@@ -235,13 +232,9 @@ async def stripe_webhook(request_body: bytes) -> dict:
         raise HTTPException(status_code=503, detail="Webhook secret not configured")
 
     try:
-        event = stripe_client.construct_event(
-            payload, sig_header, settings.stripe_webhook_secret
-        )
+        event = stripe_client.construct_event(payload, sig_header, settings.stripe_webhook_secret)
     except stripe.Error as exc:
-        raise HTTPException(
-            status_code=400, detail=f"Invalid signature: {exc}"
-        ) from exc
+        raise HTTPException(status_code=400, detail=f"Invalid signature: {exc}") from exc
 
     # Idempotency: dedupe by event.id
     # In production, store processed event IDs in Redis or DB
@@ -265,14 +258,13 @@ async def stripe_webhook(request_body: bytes) -> dict:
         elif event_type == "invoice.payment_failed":
             await _handle_invoice_payment_failed(object_data)
     except Exception as exc:
-        raise HTTPException(
-            status_code=500, detail=f"Webhook handler error: {exc}"
-        ) from exc
+        raise HTTPException(status_code=500, detail=f"Webhook handler error: {exc}") from exc
 
     return {"received": True}
 
 
 # ── Cancel ──────────────────────────────────────────────────────────
+
 
 @router.post("/cancel")
 async def cancel_subscription(
@@ -294,9 +286,7 @@ async def cancel_subscription(
     stripe_sub_id = subscription_row.stripe_subscription_id
     if stripe_sub_id and settings.stripe_secret_key:
         with contextlib.suppress(stripe.Error):
-            stripe_client.subscriptions.cancel(
-                stripe_sub_id, at_period_end=True
-            )
+            stripe_client.subscriptions.cancel(stripe_sub_id, at_period_end=True)
 
     subscription_row.status = "canceled"
     await session.commit()
@@ -308,6 +298,7 @@ async def cancel_subscription(
 
 
 # ── Subscription Status ─────────────────────────────────────────────
+
 
 @router.get("/subscription", response_model=SubscriptionResponse)
 async def get_subscription(
@@ -333,18 +324,15 @@ async def get_subscription(
         "plan_tier": sub_row.plan_tier,
         "status": sub_row.status,
         "credits_remaining": sub_row.credits_remaining,
-        "trial_ends_at": (
-            sub_row.trial_ends_at.isoformat() if sub_row.trial_ends_at else None
-        ),
+        "trial_ends_at": (sub_row.trial_ends_at.isoformat() if sub_row.trial_ends_at else None),
         "current_period_end": (
-            sub_row.current_period_end.isoformat()
-            if sub_row.current_period_end
-            else None
+            sub_row.current_period_end.isoformat() if sub_row.current_period_end else None
         ),
     }
 
 
 # ── Credit Bundles ──────────────────────────────────────────────────
+
 
 @router.get("/credit-bundles")
 async def list_credit_bundles(
@@ -368,6 +356,7 @@ async def list_credit_bundles(
 
 
 # ── Event Handlers ──────────────────────────────────────────────────
+
 
 async def _handle_checkout_completed(obj: dict) -> None:
     """Process a completed checkout session."""
@@ -410,16 +399,21 @@ async def billing_reconciliation(
     Returns discrepancy between local counts and Stripe records.
     """
     # Count local generation jobs
-    local_stmt = select(func.count()).select_from(GenerationJob).where(
-        GenerationJob.user_id == current_user_id
+    local_stmt = (
+        select(func.count())
+        .select_from(GenerationJob)
+        .where(GenerationJob.user_id == current_user_id)
     )
     local_result = await session.execute(local_stmt)
     local_count = local_result.scalar_one()
 
     # Count local credit bundles purchased
-    credit_stmt = select(func.sum(CreditPackage.credits)).select_from(CreditPackage).join(
-        UserCredit, UserCredit.package_id == CreditPackage.id
-    ).where(UserCredit.owner_id == current_user_id)
+    credit_stmt = (
+        select(func.sum(CreditPackage.credits))
+        .select_from(CreditPackage)
+        .join(UserCredit, UserCredit.package_id == CreditPackage.id)
+        .where(UserCredit.owner_id == current_user_id)
+    )
     credit_result = await session.execute(credit_stmt)
     credits_purchased = credit_result.scalar_one() or 0
 
@@ -433,4 +427,3 @@ async def billing_reconciliation(
         "discrepancy": local_count - stripe_count,
         "reconciled": local_count == stripe_count,
     }
-

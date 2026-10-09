@@ -12,21 +12,18 @@ initial release).  Background execution via Celery deferred to Sprint 7.
 
 from __future__ import annotations
 
-import asyncio
-import io
 import os
 import re
-import zipfile
 from typing import Any
-from uuid import uuid4
 
+import structlog  # noqa: E402
 from backend.auth.schemas import CurrentUserId
 from backend.config import settings
 from backend.database import get_session
-import backend.database as _db_module
 from backend.llm.adapter import GenerationError
 from backend.llm.docx_renderer import CoverLetterDocxRenderer, DocxRenderer
-from backend.llm.prompts import COVER_LETTER_SCHEMA, CV_SCHEMA, assemble_prompt
+from backend.llm.prompts import COVER_LETTER_SCHEMA, CV_SCHEMA
+from backend.storage import get_storage
 from backend.llm.service import (
     create_generation_job,
     get_job,
@@ -37,13 +34,20 @@ from backend.llm.service import (
     render_cv_markdown,
     run_generation,
 )
-from backend.models import GenerationJob, MasterProfile, StoredArtifact, GenerationMetric
+from backend.models import GenerationJob, GenerationMetric, MasterProfile, StoredArtifact
 from backend.validators.sanitization import sanitize_text  # noqa: E402
-import structlog  # noqa: E402
 
 log = structlog.get_logger()
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status, WebSocket, WebSocketDisconnect
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Response,
+    WebSocket,
+    WebSocketDisconnect,
+    status,
+)
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -68,23 +72,131 @@ class GenerationRequest(BaseModel):
         from_attributes = True
 
 
-_STOP_WORDS: frozenset[str] = frozenset({
-    "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for",
-    "of", "with", "by", "from", "is", "are", "was", "were", "be", "been",
-    "being", "have", "has", "had", "do", "does", "did", "will", "would",
-    "could", "should", "may", "might", "shall", "can", "need", "dare",
-    "ought", "used", "this", "that", "these", "those", "it", "its", "as",
-    "not", "no", "nor", "so", "if", "then", "than", "too", "very", "just",
-    "about", "above", "after", "again", "against", "all", "also", "any",
-    "because", "before", "between", "both", "each", "few", "more", "most",
-    "other", "some", "such", "only", "own", "same", "into", "over", "under",
-    "up", "out", "off", "down", "here", "there", "when", "where", "why",
-    "how", "what", "which", "who", "whom", "whose", "i", "me", "my", "we",
-    "our", "you", "your", "he", "him", "his", "she", "her", "they", "them",
-    "their", "am",
-})
+_STOP_WORDS: frozenset[str] = frozenset(
+    {
+        "the",
+        "a",
+        "an",
+        "and",
+        "or",
+        "but",
+        "in",
+        "on",
+        "at",
+        "to",
+        "for",
+        "of",
+        "with",
+        "by",
+        "from",
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "been",
+        "being",
+        "have",
+        "has",
+        "had",
+        "do",
+        "does",
+        "did",
+        "will",
+        "would",
+        "could",
+        "should",
+        "may",
+        "might",
+        "shall",
+        "can",
+        "need",
+        "dare",
+        "ought",
+        "used",
+        "this",
+        "that",
+        "these",
+        "those",
+        "it",
+        "its",
+        "as",
+        "not",
+        "no",
+        "nor",
+        "so",
+        "if",
+        "then",
+        "than",
+        "too",
+        "very",
+        "just",
+        "about",
+        "above",
+        "after",
+        "again",
+        "against",
+        "all",
+        "also",
+        "any",
+        "because",
+        "before",
+        "between",
+        "both",
+        "each",
+        "few",
+        "more",
+        "most",
+        "other",
+        "some",
+        "such",
+        "only",
+        "own",
+        "same",
+        "into",
+        "over",
+        "under",
+        "up",
+        "out",
+        "off",
+        "down",
+        "here",
+        "there",
+        "when",
+        "where",
+        "why",
+        "how",
+        "what",
+        "which",
+        "who",
+        "whom",
+        "whose",
+        "i",
+        "me",
+        "my",
+        "we",
+        "our",
+        "you",
+        "your",
+        "he",
+        "him",
+        "his",
+        "she",
+        "her",
+        "they",
+        "them",
+        "their",
+        "am",
+    }
+)
 
-SUPPORTED_LANGUAGES = {"en": "English", "es": "Spanish", "de": "German", "fr": "French", "fi": "Finnish"}
+SUPPORTED_LANGUAGES = {
+    "en": "English",
+    "es": "Spanish",
+    "de": "German",
+    "fr": "French",
+    "fi": "Finnish",
+}
 
 LANGUAGE_LABELS: dict[str, str] = {
     "en": "",
@@ -122,115 +234,129 @@ async def track_usage(
     session.add(metric)
 
 
-async def _run_generation_background(job_id: str, user_id: str):
-    """Background task: run LLM generation, render artifacts, update job status.
+async def _run_generation_inline(
+    session: AsyncSession,
+    job: GenerationJob,
+    user_id: str,
+    *,
+    provider: str | None = None,
+    model: str | None = None,
+    jev_context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Run generation inline (within the request) and return the result payload.
 
-    Creates its own DB session so the request handler is not blocked.
+    Uses module-level imports so the test suite can patch the service-layer
+    names on ``backend.api.routes.generate``.
     """
-    if _db_module._session_factory is None:
-        return
-    session = _db_module._session_factory()
+    from backend.config import settings as _settings
+    from backend.llm.pdf_renderer import await_convert as pdf_convert
+    from backend.models import User
+
+    cv, cover_letter = await run_generation(
+        session,
+        job,
+        provider=provider,
+        model=model,
+        jev_context=jev_context,
+    )
+
+    cv_markdown = render_cv_markdown(cv)
+    cl_markdown = render_cover_letter_markdown(cover_letter)
+
+    # Sprint 4: render actual .docx and .pdf files
+    artifacts_dir = _settings.generation_artifacts_dir
+    os.makedirs(artifacts_dir, exist_ok=True)
+    cv_docx_path = os.path.join(artifacts_dir, f"{job.id}_cv.docx")
+    cl_docx_path = os.path.join(artifacts_dir, f"{job.id}_cover_letter.docx")
+    cv_pdf_path = os.path.join(artifacts_dir, f"{job.id}_cv.pdf")
+    cl_pdf_path = os.path.join(artifacts_dir, f"{job.id}_cover_letter.pdf")
+
+    DocxRenderer().render(cv).save(cv_docx_path)
+    CoverLetterDocxRenderer().render(cover_letter).save(cl_docx_path)
+
+    # PDF conversion is best-effort: a missing/broken LibreOffice must not
+    # fail the whole generation.
     try:
-        async with session as db:
-            from backend.models import GenerationJob, MasterProfile, User
-            from backend.llm.service import (
-                run_generation, mark_job_completed, mark_job_failed,
-            )
-            from backend.llm.docx_renderer import CoverLetterDocxRenderer, DocxRenderer
-            from backend.llm.pdf_renderer import await_convert as pdf_convert
-            from backend.validators.sanitization import sanitize_text
-            from backend.llm.adapter import GenerationError
-            from backend.config import settings
+        await pdf_convert(cv_docx_path, artifacts_dir)
+        await pdf_convert(cl_docx_path, artifacts_dir)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("pdf_conversion_skipped", job_id=job.id, error=str(exc))
+        cv_pdf_path = cl_pdf_path = None
 
-            job_result = await db.get(GenerationJob, job_id)
-            if job_result is None:
-                log.error("background_generation_job_not_found", job_id=job_id)
-                return
+    # Persist via the configured storage backend (local in dev, S3 in prod).
+    # save_file returns the stored reference (local path or s3:// URI); local
+    # temp copies are removed once they live in object storage.
+    storage = get_storage()
+    locals_before = {
+        key: (os.path.join(artifacts_dir, key) if use else None)
+        for key, use in (
+            (f"{job.id}_cv.docx", True),
+            (f"{job.id}_cover_letter.docx", True),
+            (f"{job.id}_cv.pdf", cv_pdf_path is not None),
+            (f"{job.id}_cover_letter.pdf", cl_pdf_path is not None),
+        )
+    }
+    stored_refs: dict[str, str | None] = {}
+    for key, local in locals_before.items():
+        stored_refs[key] = storage.save_file(local, key) if local else None  # type: ignore[arg-type]
+    cv_docx_path = stored_refs[f"{job.id}_cv.docx"]
+    cl_docx_path = stored_refs[f"{job.id}_cover_letter.docx"]
+    cv_pdf_path = stored_refs[f"{job.id}_cv.pdf"]
+    cl_pdf_path = stored_refs[f"{job.id}_cover_letter.pdf"]
+    for key, local in locals_before.items():
+        ref = stored_refs[key]
+        if local and ref and ref.startswith("s3://") and os.path.isfile(local):
+            os.remove(local)
 
-            job = job_result
-            profile_id = job.profile_id
-            job_description = job.job_description
-            job_title = job.job_title
-            company_name = job.company_name
-            provider = job.provider
-            model = job.model_name
-            output_language = job.output_language
+    at_score, missing_keywords = _compute_at_score(cv, str(job.job_description))
 
-            # Verify profile still exists
-            profile_stmt = select(MasterProfile).where(
-                MasterProfile.id == profile_id,
-                MasterProfile.user_id == user_id,
-            )
-            profile_result = await db.execute(profile_stmt)
-            profile = profile_result.scalar_one_or_none()
-            if profile is None:
-                await mark_job_failed(db, job.id, "Profile not found or not owned")
-                return
+    await mark_job_completed(
+        session,
+        job.id,
+        cv_json=cv,
+        cover_letter_json=cover_letter,
+        at_score=at_score,
+        missing_keywords=missing_keywords,
+        cv_docx_path=cv_docx_path,
+        cl_docx_path=cl_docx_path,
+        cv_pdf_path=cv_pdf_path,
+        cl_pdf_path=cl_pdf_path,
+        user_id=user_id,
+    )
 
-            try:
-                cv, cover_letter = await run_generation(
-                    db, job, provider=provider, model=model,
-                )
+    # Track usage (best-effort — metric rows must never fail a generation)
+    try:
+        user_result = await session.execute(select(User).where(User.id == user_id))
+        user = user_result.scalar_one_or_none()
+        org_id = getattr(user, "organization_id", None) if user else None
+        await track_usage(
+            session,
+            organization_id=org_id or "",
+            user_id=user_id,
+            generation_job_id=job.id,
+            provider=job.provider or "system_default",
+            model_name=job.model_name or "unknown",
+            output_language=job.output_language,
+            export_format="both",
+            at_score=at_score,
+            tokens_used=job.tokens_used,
+        )
+    except Exception as exc:  # noqa: BLE001
+        log.warning("usage_tracking_skipped", job_id=job.id, error=str(exc))
 
-                cv_markdown = render_cv_markdown(cv)
-                cl_markdown = render_cover_letter_markdown(cover_letter)
-
-                # Sprint 4: render actual .docx and .pdf files
-                artifacts_dir = settings.generation_artifacts_dir
-                os.makedirs(artifacts_dir, exist_ok=True)
-                cv_docx_path = os.path.join(artifacts_dir, f"{job.id}_cv.docx")
-                cl_docx_path = os.path.join(artifacts_dir, f"{job.id}_cover_letter.docx")
-                cv_pdf_path = os.path.join(artifacts_dir, f"{job.id}_cv.pdf")
-                cl_pdf_path = os.path.join(artifacts_dir, f"{job.id}_cover_letter.pdf")
-
-                DocxRenderer().render(cv).save(cv_docx_path)
-                CoverLetterDocxRenderer().render(cover_letter).save(cl_docx_path)
-                await pdf_convert(cv_docx_path, artifacts_dir)
-                await pdf_convert(cl_docx_path, artifacts_dir)
-
-                at_score, missing_keywords = _compute_at_score(cv, str(job_description))
-
-                await mark_job_completed(
-                    db, job.id,
-                    cv_json=cv, cover_letter_json=cover_letter,
-                    at_score=at_score,
-                    cv_docx_path=cv_docx_path,
-                    cl_docx_path=cl_docx_path,
-                    cv_pdf_path=cv_pdf_path,
-                    cl_pdf_path=cl_pdf_path,
-                    user_id=user_id,
-                )
-
-                # Track usage
-                user_stmt = select(User).where(User.id == user_id)
-                user_result = await db.execute(user_stmt)
-                user = user_result.scalar_one_or_none()
-                org_id = getattr(user, "organization_id", None) if user else None
-                await track_usage(
-                    db, organization_id=org_id or "",
-                    user_id=user_id,
-                    generation_job_id=job.id,
-                    provider=job.provider or "system_default",
-                    model_name=job.model_name or "unknown",
-                    output_language=output_language,
-                    export_format="both",
-                    at_score=at_score,
-                    tokens_used=job.tokens_used,
-                )
-
-                log.info("generation_completed_background", job_id=job.id)
-
-            except GenerationError as exc:
-                await mark_job_failed(db, job.id, str(exc))
-                log.error("generation_failed_background", job_id=job.id, error=str(exc))
-            except ValueError as exc:
-                await mark_job_failed(db, job.id, str(exc))
-                log.error("generation_invalid_background", job_id=job.id, error=str(exc))
-            except Exception as exc:
-                await mark_job_failed(db, job.id, str(exc))
-                log.error("generation_error_background", job_id=job.id, error=str(exc))
-    finally:
-        await session.close()
+    return {
+        "job_id": job.id,
+        "status": "completed",
+        "message": "Generation completed",
+        "cv_markdown": cv_markdown,
+        "cover_letter_markdown": cl_markdown,
+        "cv_docx_path": cv_docx_path,
+        "cl_docx_path": cl_docx_path,
+        "cv_pdf_path": cv_pdf_path,
+        "cl_pdf_path": cl_pdf_path,
+        "at_score": at_score,
+        "missing_keywords": missing_keywords,
+    }
 
 
 @router.post("", status_code=status.HTTP_202_ACCEPTED)
@@ -271,7 +397,10 @@ async def start_generation(
     jev_analysis = request.get("jev_analysis")
 
     if output_language not in SUPPORTED_LANGUAGES:
-        raise HTTPException(status_code=400, detail=f"Unsupported output_language: {output_language}. Supported: {list(SUPPORTED_LANGUAGES.keys())}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported output_language: {output_language}. Supported: {list(SUPPORTED_LANGUAGES.keys())}",
+        )
 
     if not profile_id:
         raise HTTPException(status_code=400, detail="profile_id is required")
@@ -317,16 +446,41 @@ async def start_generation(
         model=model,
     )
 
-    # Mark processing and start background generation
-    await mark_job_processing(session, job.id)
-    # Start background task so the request is not blocked
-    asyncio.create_task(_run_generation_background(job.id, current_user_id))
+    if settings.use_celery:
+        # Production: enqueue for the Celery worker; startup recovery
+        # re-enqueues jobs stuck in pending/processing.
+        from backend.tasks import run_generation_task
 
-    return {
-        "job_id": job.id,
-        "status": "processing",
-        "message": "Generation started",
-    }
+        run_generation_task.delay(job.id, current_user_id)
+        return {"job_id": job.id, "status": "queued", "message": "Generation queued"}
+
+    # Inline mode (dev/tests): run within this request.
+    await mark_job_processing(session, job.id)
+
+    try:
+        result = await _run_generation_inline(
+            session,
+            job,
+            current_user_id,
+            provider=provider,
+            model=model,
+            jev_context=jev_analysis,
+        )
+    except GenerationError as exc:
+        await mark_job_failed(session, job.id, str(exc))
+        log.error("generation_failed", job_id=job.id, error=str(exc))
+        raise HTTPException(status_code=502, detail=f"LLM generation failed: {exc}") from exc
+    except ValueError as exc:
+        await mark_job_failed(session, job.id, str(exc))
+        log.error("generation_invalid", job_id=job.id, error=str(exc))
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        await mark_job_failed(session, job.id, str(exc))
+        log.error("generation_error", job_id=job.id, error=str(exc))
+        raise HTTPException(status_code=500, detail=f"Generation failed: {exc}") from exc
+
+    log.info("generation_completed", job_id=job.id)
+    return result
 
 
 def _compute_at_score(cv: dict[str, Any], job_description: str) -> tuple[int, list[str]]:
@@ -396,13 +550,22 @@ async def download_cv_docx(
         raise HTTPException(status_code=404, detail="Generation job not found")
     if job.status != "completed":
         raise HTTPException(status_code=409, detail="Job not yet completed")
-    if not job.cv_docx_url or not os.path.isfile(job.cv_docx_url):
+    if not job.cv_docx_url:
+        raise HTTPException(status_code=404, detail="CV DOCX not available")
+    if job.cv_docx_url.startswith("s3://"):
+        from fastapi.responses import RedirectResponse
+
+        return RedirectResponse(get_storage().presigned_url(job.cv_docx_url))  # type: ignore[union-attr,return-value]
+    if not os.path.isfile(job.cv_docx_url):
         raise HTTPException(status_code=404, detail="CV DOCX not available")
 
     with open(job.cv_docx_url, "rb") as f:
         data = f.read()
-    return Response(content=data, media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    headers={"Content-Disposition": f"attachment; filename={job.id}_cv.docx"})
+    return Response(
+        content=data,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f"attachment; filename={job.id}_cv.docx"},
+    )
 
 
 @router.get("/jobs/{job_id}/cover-letter")
@@ -418,13 +581,22 @@ async def download_cl_docx(
         raise HTTPException(status_code=404, detail="Generation job not found")
     if job.status != "completed":
         raise HTTPException(status_code=409, detail="Job not yet completed")
-    if not job.cl_docx_url or not os.path.isfile(job.cl_docx_url):
+    if not job.cl_docx_url:
+        raise HTTPException(status_code=404, detail="Cover letter DOCX not available")
+    if job.cl_docx_url.startswith("s3://"):
+        from fastapi.responses import RedirectResponse
+
+        return RedirectResponse(get_storage().presigned_url(job.cl_docx_url))  # type: ignore[union-attr,return-value]
+    if not os.path.isfile(job.cl_docx_url):
         raise HTTPException(status_code=404, detail="Cover letter DOCX not available")
 
     with open(job.cl_docx_url, "rb") as f:
         data = f.read()
-    return Response(content=data, media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    headers={"Content-Disposition": f"attachment; filename={job.id}_cover_letter.docx"})
+    return Response(
+        content=data,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f"attachment; filename={job.id}_cover_letter.docx"},
+    )
 
 
 @router.get("/jobs/{job_id}")
@@ -512,7 +684,7 @@ async def stream_generation(
         return
 
     # Validate token and get user_id
-    from backend.auth.jwt_utils import decode_token, get_user_id_from_token
+    from backend.auth.jwt_utils import get_user_id_from_token
 
     try:
         user_id = get_user_id_from_token(token)
@@ -538,8 +710,8 @@ async def stream_generation(
         await mark_job_processing(session, job_id)
 
         # Load profile and build prompt
-        from backend.models import MasterProfile
         from backend.llm.prompts import assemble_prompt
+        from backend.models import MasterProfile
         from backend.profiles.schemas import MasterProfileData
         from backend.profiles.service import _load_profile_data
 
@@ -608,7 +780,11 @@ async def stream_generation(
 
             for i in range(0, len(cl_str), chunk_size):
                 await websocket.send_json(
-                    {"type": "token", "content": cl_str[i : i + chunk_size], "section": "cover_letter"}
+                    {
+                        "type": "token",
+                        "content": cl_str[i : i + chunk_size],
+                        "section": "cover_letter",
+                    }
                 )
 
             # Render artifacts
@@ -726,7 +902,9 @@ async def bulk_generate(
     for job_req in request.jobs:
         raw_desc = sanitize_text(str(job_req.get("job_description", "")))
         raw_title = sanitize_text(str(job_req.get("job_title"))) if job_req.get("job_title") else ""
-        raw_company = sanitize_text(str(job_req.get("company_name"))) if job_req.get("company_name") else ""
+        raw_company = (
+            sanitize_text(str(job_req.get("company_name"))) if job_req.get("company_name") else ""
+        )
         job = await create_generation_job(
             session=session,
             user_id=current_user_id,
@@ -740,13 +918,31 @@ async def bulk_generate(
         )
         job_ids.append(job.id)
 
-    return {
-        "jobs": [
-            {"job_id": jid, "status": "pending"}
-            for jid in job_ids
-        ],
-        "total": len(job_ids),
-    }
+    if settings.use_celery:
+        from backend.tasks import run_generation_task
+
+        for jid in job_ids:
+            run_generation_task.delay(jid, current_user_id)
+        return {
+            "jobs": [{"job_id": jid, "status": "queued"} for jid in job_ids],
+            "total": len(job_ids),
+        }
+
+    # Inline mode: run each job to completion within this request
+    results = []
+    for jid in job_ids:
+        job = await get_job(session, jid, current_user_id)
+        if job is None:
+            results.append({"job_id": jid, "status": "not_found"})
+            continue
+        await mark_job_processing(session, job.id)
+        try:
+            await _run_generation_inline(session, job, current_user_id)
+            results.append({"job_id": jid, "status": "completed"})
+        except Exception as exc:  # noqa: BLE001 — one failure must not abort the batch
+            await mark_job_failed(session, job.id, str(exc))
+            results.append({"job_id": jid, "status": "failed", "error": str(exc)})
+    return {"jobs": results, "total": len(results)}
 
 
 # ── Document Library ────────────────────────────────────────────────────────
@@ -878,5 +1074,11 @@ async def download_artifact(
         file_bytes = f.read()
     # Determine media type from file extension
     ext = os.path.splitext(file_path)[1].lower()
-    media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document" if ext == ".docx" else "application/pdf" if ext == ".pdf" else "application/octet-stream"
+    media_type = (
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        if ext == ".docx"
+        else "application/pdf"
+        if ext == ".pdf"
+        else "application/octet-stream"
+    )
     return Response(content=file_bytes, media_type=media_type)

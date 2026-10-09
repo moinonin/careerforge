@@ -23,6 +23,7 @@ from backend.llm.adapter import (
 # OpenAI
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 @register_adapter("nous")
 @register_adapter("openai")
 class OpenAIAdapter(LLMAdapter):
@@ -51,7 +52,7 @@ class OpenAIAdapter(LLMAdapter):
         start = stripped.find("{")
         end = stripped.rfind("}")
         if start >= 0 and end > start:
-            stripped = stripped[start:end + 1]
+            stripped = stripped[start : end + 1]
         return stripped
 
     async def generate(
@@ -127,6 +128,7 @@ class OpenAIAdapter(LLMAdapter):
 # ═══════════════════════════════════════════════════════════════════════════════
 # LiteLLM (covers Anthropic, DeepSeek, Gemini, Ollama, AWS Bedrock, …)
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 @register_adapter("litellm")
 class LiteLLMAdapter(LLMAdapter):
@@ -222,6 +224,7 @@ class LiteLLMAdapter(LLMAdapter):
 # ═══════════════════════════════════════════════════════════════════════════════
 # Ollama (direct HTTP — for explicit localhost / custom Ollama setups)
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 @register_adapter("ollama")
 class OllamaAdapter(LLMAdapter):
