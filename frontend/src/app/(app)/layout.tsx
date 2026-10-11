@@ -33,7 +33,10 @@ export default function AppLayout({
   if (loading && !PUBLIC_PATHS.some((p) => pathname.startsWith(p)) && pathname !== ROOT_PATH) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-8 w-8 border-2 border-[var(--color-accent)] border-t-transparent" />
+        <svg className="animate-spin w-8 h-8 text-brand-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
+          <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
+        </svg>
       </div>
     )
   }
