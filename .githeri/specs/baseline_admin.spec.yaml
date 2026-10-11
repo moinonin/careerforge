@@ -1,0 +1,16 @@
+task_id: baseline-admin
+summary: Auto-generated baseline contract for backend/api/routes/admin.py (audit of
+  existing code)
+generated: true
+status: draft
+generated_by: githeri spec --from-code
+endpoints:
+- method: GET
+  path: /generation-log
+  file: backend/api/routes/admin.py
+- method: GET
+  path: /metrics
+  file: backend/api/routes/admin.py
+- method: GET
+  path: /users
+  file: backend/api/routes/admin.py

@@ -1,0 +1,130 @@
+task_id: generate-api
+summary: CareerForge Generation API - CV & cover letter generation, job management,
+  document library
+status: active
+approved_by: githeri-review
+approved_commit: local
+generated: true
+generated_by: githeri spec --from-code + manual review
+endpoints:
+- method: POST
+  path: /api/v1/generate
+  summary: Start Generation
+  description: Kick off a CV + cover letter generation job
+  requires_auth: true
+  expected_status:
+  - 202
+  - 401
+  - 422
+  request_schema:
+    profile_id: string (uuid, required)
+    job_description: string (required)
+    job_title: string (optional)
+    company_name: string (optional)
+    output_language: string (optional)
+    provider: string (optional)
+    model: string (optional)
+  response_schema:
+    job_id: string (uuid)
+    status: string
+    message: string
+- method: GET
+  path: /api/v1/generate/jobs/{job_id}
+  summary: Get Generation Job
+  description: Return the status of a generation job and its artifact URLs
+  requires_auth: true
+  expected_status:
+  - 200
+  - 401
+  - 404
+  - 422
+  response_schema:
+    job_id: string (uuid)
+    status: string (pending | processing | completed | failed)
+    job_title: string
+    company_name: string
+    job_description: string
+    error_message: string (optional)
+    cv_docx_url: string (optional)
+    cv_pdf_url: string (optional)
+    cl_docx_url: string (optional)
+    cl_pdf_url: string (optional)
+    at_score: integer (optional)
+    tokens_used: integer (optional)
+    execution_time_ms: integer (optional)
+    created_at: string (iso8601)
+    completed_at: string (iso8601, optional)
+- method: GET
+  path: /api/v1/generate/jobs/{job_id}/cv
+  summary: Download CV DOCX
+  description: Download the CV DOCX artifact for a completed generation job
+  requires_auth: true
+  expected_status:
+  - 200
+  - 401
+  - 404
+  - 422
+  response_type: application/vnd.openxmlformats-officedocument.wordprocessingml.document
+- method: GET
+  path: /api/v1/generate/jobs/{job_id}/cover-letter
+  summary: Download Cover Letter DOCX
+  description: Download the cover letter DOCX artifact for a completed generation
+    job
+  requires_auth: true
+  expected_status:
+  - 200
+  - 401
+  - 404
+  - 422
+  response_type: application/vnd.openxmlformats-officedocument.wordprocessingml.document
+- method: POST
+  path: /api/v1/generate/bulk
+  summary: Bulk Generate
+  description: Kick off multiple generation jobs in one request
+  requires_auth: true
+  expected_status:
+  - 202
+  - 401
+  - 422
+  request_schema:
+    profile_id: string (uuid, required)
+    jobs: array (required)
+  response_schema:
+    jobs: array
+- method: POST
+  path: /api/v1/generate/{job_id}/save
+  summary: Save Artifact
+  description: Save a completed generation job to the document library as a permanent
+    artifact
+  requires_auth: true
+  expected_status:
+  - 200
+  - 401
+  - 404
+  - 422
+  request_schema:
+    title: string (required)
+    job_title: string (optional)
+    company_name: string (optional)
+    at_score: integer (optional)
+    is_temp: 'boolean (default: false)'
+- method: GET
+  path: /api/v1/generate/library
+  summary: List Library
+  description: List all permanent documents in the user library
+  requires_auth: true
+  expected_status:
+  - 200
+  - 401
+  response_schema:
+    documents: array
+- method: GET
+  path: /api/v1/generate/library/{artifact_id}/download
+  summary: Download Artifact
+  description: Download a single artifact by ID
+  requires_auth: true
+  expected_status:
+  - 200
+  - 401
+  - 404
+  - 422

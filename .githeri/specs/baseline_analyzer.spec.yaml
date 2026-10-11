@@ -1,0 +1,10 @@
+task_id: baseline-analyzer
+summary: Auto-generated baseline contract for backend/api/routes/analyzer.py (audit
+  of existing code)
+generated: true
+status: draft
+generated_by: githeri spec --from-code
+endpoints:
+- method: POST
+  path: ''
+  file: backend/api/routes/analyzer.py

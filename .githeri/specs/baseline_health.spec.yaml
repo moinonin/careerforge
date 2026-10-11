@@ -1,0 +1,13 @@
+task_id: baseline-health
+summary: Auto-generated baseline contract for backend/api/routes/health.py (audit
+  of existing code)
+generated: true
+status: draft
+generated_by: githeri spec --from-code
+endpoints:
+- method: GET
+  path: /health
+  file: backend/api/routes/health.py
+- method: GET
+  path: /ready
+  file: backend/api/routes/health.py

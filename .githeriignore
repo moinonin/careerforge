@@ -1,0 +1,4 @@
+# Ignore routes that are implemented but not detected by scanner
+# Users/me endpoints use @users_router which isn't matched by scanner pattern
+GET /api/v1/users/me
+PUT /api/v1/users/me

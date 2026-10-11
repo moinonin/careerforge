@@ -1,0 +1,25 @@
+task_id: baseline-billing
+summary: Auto-generated baseline contract for backend/api/routes/billing.py (audit
+  of existing code)
+generated: true
+status: draft
+generated_by: githeri spec --from-code
+endpoints:
+- method: GET
+  path: /credit-bundles
+  file: backend/api/routes/billing.py
+- method: GET
+  path: /reconciliation
+  file: backend/api/routes/billing.py
+- method: GET
+  path: /subscription
+  file: backend/api/routes/billing.py
+- method: POST
+  path: /cancel
+  file: backend/api/routes/billing.py
+- method: POST
+  path: /checkout-session
+  file: backend/api/routes/billing.py
+- method: POST
+  path: /webhook
+  file: backend/api/routes/billing.py

@@ -1,0 +1,10 @@
+task_id: baseline-router
+summary: Auto-generated baseline contract for backend/auth/router.py (audit of existing
+  code)
+generated: true
+status: draft
+generated_by: githeri spec --from-code
+endpoints:
+- method: PATCH
+  path: /{profile_id}/sections/{section_name}
+  file: backend/auth/router.py

@@ -1,0 +1,196 @@
+version: 1
+framework: fastapi
+entrypoint: backend/main.py
+app_var: app
+routers:
+- file: backend/auth/router.py
+  module: backend.auth.router
+  vars:
+  - router
+  - users_router
+- file: backend/api/routes/billing.py
+  module: backend.api.routes.billing
+  vars:
+  - router
+- file: backend/api/routes/generate.py
+  module: backend.api.routes.generate
+  vars:
+  - router
+- file: backend/api/routes/jev_analyzer.py
+  module: backend.api.routes.jev_analyzer
+  vars:
+  - router
+- file: backend/api/routes/health.py
+  module: backend.api.routes.health
+  vars:
+  - router
+- file: backend/api/routes/feedback.py
+  module: backend.api.routes.feedback
+  vars:
+  - router
+- file: backend/api/routes/analyzer.py
+  module: backend.api.routes.analyzer
+  vars:
+  - router
+- file: backend/api/routes/admin.py
+  module: backend.api.routes.admin
+  vars:
+  - router
+- file: backend/api/routes/organizations.py
+  module: backend.api.routes.organizations
+  vars:
+  - router
+- file: backend/api/routes/llm_config.py
+  module: backend.api.routes.llm_config
+  vars:
+  - router
+- file: backend/profiles/router.py
+  module: backend.profiles.router
+  vars:
+  - router
+mounted_routers:
+- router: health.router
+  prefix: ''
+  tags:
+  - health
+  file: backend/main.py
+- router: auth_router
+  prefix: /api/v1/auth
+  tags:
+  - auth
+  file: backend/main.py
+- router: users_router
+  prefix: /api/v1/users
+  tags:
+  - users
+  file: backend/main.py
+- router: profiles_router
+  prefix: /api/v1/profiles
+  tags:
+  - profiles
+  file: backend/main.py
+- router: generate_router
+  prefix: /api/v1/generate
+  tags:
+  - generation
+  file: backend/main.py
+- router: llm_config_router
+  prefix: /api/v1/llm-config
+  tags:
+  - llm-config
+  file: backend/main.py
+- router: organizations_router
+  prefix: ''
+  tags:
+  - organizations
+  file: backend/main.py
+- router: analyzer_router
+  prefix: /api/v1/analyzer
+  tags:
+  - analyzer
+  file: backend/main.py
+- router: jev_analyzer_router
+  prefix: /api/v1/analyzer
+  tags:
+  - analyzer
+  file: backend/main.py
+- router: billing_router
+  prefix: /api/v1/billing
+  tags:
+  - billing
+  file: backend/main.py
+- router: admin_router
+  prefix: ''
+  tags:
+  - admin
+  file: backend/main.py
+- router: feedback_router
+  prefix: ''
+  tags: []
+  file: backend/main.py
+dependencies:
+  db_session: null
+  auth_guard: backend.auth.schemas:get_current_user_id
+models:
+  User: backend.models:User
+  MasterProfile: backend.models:MasterProfile
+  Subscription: backend.models:Subscription
+  LLMConfig: backend.models:LLMConfig
+  GenerationJob: backend.models:GenerationJob
+  StoredArtifact: backend.models:StoredArtifact
+  CreditPackage: backend.models:CreditPackage
+  UserCredit: backend.models:UserCredit
+  AuditLog: backend.models:AuditLog
+  Notification: backend.models:Notification
+  EmailQueue: backend.models:EmailQueue
+  Organization: backend.models:Organization
+  OrganizationMember: backend.models:OrganizationMember
+  OrganizationMasterProfile: backend.models:OrganizationMasterProfile
+  OrganizationUsageLog: backend.models:OrganizationUsageLog
+  OrganizationInvitation: backend.models:OrganizationInvitation
+  RefreshToken: backend.models:RefreshToken
+  GenerationMetric: backend.models:GenerationMetric
+  Feedback: backend.models:Feedback
+  Base: backend.database:Base
+  ContactOutput: backend.llm.output_models:ContactOutput
+  SkillsOutput: backend.llm.output_models:SkillsOutput
+  ExperienceOutput: backend.llm.output_models:ExperienceOutput
+  EducationOutput: backend.llm.output_models:EducationOutput
+  PublicationOutput: backend.llm.output_models:PublicationOutput
+  CertificationOutput: backend.llm.output_models:CertificationOutput
+  LanguageOutput: backend.llm.output_models:LanguageOutput
+  ProjectOutput: backend.llm.output_models:ProjectOutput
+  CVOutput: backend.llm.output_models:CVOutput
+  CoverLetterOutput: backend.llm.output_models:CoverLetterOutput
+  SignupRequest: backend.auth.schemas:SignupRequest
+  LoginRequest: backend.auth.schemas:LoginRequest
+  TokenResponse: backend.auth.schemas:TokenResponse
+  RefreshRequest: backend.auth.schemas:RefreshRequest
+  ForgotPasswordRequest: backend.auth.schemas:ForgotPasswordRequest
+  ResetPasswordRequest: backend.auth.schemas:ResetPasswordRequest
+  UserMeResponse: backend.auth.schemas:UserMeResponse
+  CheckoutSessionRequest: backend.api.routes.billing:CheckoutSessionRequest
+  CheckoutResponse: backend.api.routes.billing:CheckoutResponse
+  SubscriptionResponse: backend.api.routes.billing:SubscriptionResponse
+  GenerationRequest: backend.api.routes.generate:GenerationRequest
+  BulkGenerationRequest: backend.api.routes.generate:BulkGenerationRequest
+  SaveArtifactRequest: backend.api.routes.generate:SaveArtifactRequest
+  JevAnalyzerRequest: backend.api.routes.jev_analyzer:JevAnalyzerRequest
+  JevAnalyzerResponse: backend.api.routes.jev_analyzer:JevAnalyzerResponse
+  FeedbackCreate: backend.api.routes.feedback:FeedbackCreate
+  AnalyzerRequest: backend.api.routes.analyzer:AnalyzerRequest
+  AnalyzerResponse: backend.api.routes.analyzer:AnalyzerResponse
+  OrganizationCreate: backend.api.routes.organizations:OrganizationCreate
+  OrganizationResponse: backend.api.routes.organizations:OrganizationResponse
+  MemberResponse: backend.api.routes.organizations:MemberResponse
+  InvitationCreate: backend.api.routes.organizations:InvitationCreate
+  InvitationResponse: backend.api.routes.organizations:InvitationResponse
+  InvitationAccept: backend.api.routes.organizations:InvitationAccept
+  MasterProfileCreate: backend.api.routes.organizations:MasterProfileCreate
+  MasterProfileResponse: backend.api.routes.organizations:MasterProfileResponse
+  UsageResponse: backend.api.routes.organizations:UsageResponse
+  LLMConfigCreate: backend.api.routes.llm_config:LLMConfigCreate
+  LLMConfigUpdate: backend.api.routes.llm_config:LLMConfigUpdate
+  LLMConfigResponse: backend.api.routes.llm_config:LLMConfigResponse
+  LLMConfigTestRequest: backend.api.routes.llm_config:LLMConfigTestRequest
+  LLMConfigTestResponse: backend.api.routes.llm_config:LLMConfigTestResponse
+  OllamaModel: backend.api.routes.llm_config:OllamaModel
+  OllamaModelsResponse: backend.api.routes.llm_config:OllamaModelsResponse
+  _ParsedSection: backend.profiles.cv_parser:_ParsedSection
+  ContactInfo: backend.profiles.schemas:ContactInfo
+  EducationEntry: backend.profiles.schemas:EducationEntry
+  ExperienceEntry: backend.profiles.schemas:ExperienceEntry
+  SkillsGroup: backend.profiles.schemas:SkillsGroup
+  PublicationEntry: backend.profiles.schemas:PublicationEntry
+  CertificationEntry: backend.profiles.schemas:CertificationEntry
+  LanguageEntry: backend.profiles.schemas:LanguageEntry
+  ProjectEntry: backend.profiles.schemas:ProjectEntry
+  MasterProfileData: backend.profiles.schemas:MasterProfileData
+  ProfileCreateRequest: backend.profiles.schemas:ProfileCreateRequest
+  ProfileUpdateRequest: backend.profiles.schemas:ProfileUpdateRequest
+  ProfileSectionPatchRequest: backend.profiles.schemas:ProfileSectionPatchRequest
+  ProfileListResponse: backend.profiles.router:ProfileListResponse
+  SkillSuggestionResponse: backend.profiles.router:SkillSuggestionResponse
+  ProfileImportRequest: backend.profiles.router:ProfileImportRequest
+test_framework: pytest
+test_command: pytest tests/

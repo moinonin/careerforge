@@ -1,0 +1,28 @@
+task_id: baseline-organizations
+summary: Auto-generated baseline contract for backend/api/routes/organizations.py
+  (audit of existing code)
+generated: true
+status: draft
+generated_by: githeri spec --from-code
+endpoints:
+- method: DELETE
+  path: /{org_id}/master-profiles/{profile_id}
+  file: backend/api/routes/organizations.py
+- method: DELETE
+  path: /{org_id}/members/{user_id}
+  file: backend/api/routes/organizations.py
+- method: GET
+  path: /{org_id}
+  file: backend/api/routes/organizations.py
+- method: GET
+  path: /{org_id}/master-profiles
+  file: backend/api/routes/organizations.py
+- method: GET
+  path: /{org_id}/members
+  file: backend/api/routes/organizations.py
+- method: GET
+  path: /{org_id}/usage
+  file: backend/api/routes/organizations.py
+- method: PATCH
+  path: /{org_id}/billing
+  file: backend/api/routes/organizations.py

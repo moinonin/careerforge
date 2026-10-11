@@ -1,0 +1,16 @@
+task_id: baseline-llm_config
+summary: Auto-generated baseline contract for backend/api/routes/llm_config.py (audit
+  of existing code)
+generated: true
+status: draft
+generated_by: githeri spec --from-code
+endpoints:
+- method: DELETE
+  path: /{config_id}
+  file: backend/api/routes/llm_config.py
+- method: GET
+  path: ''
+  file: backend/api/routes/llm_config.py
+- method: PUT
+  path: /{config_id}
+  file: backend/api/routes/llm_config.py

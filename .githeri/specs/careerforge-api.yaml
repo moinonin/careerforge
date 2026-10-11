@@ -1,0 +1,407 @@
+task_id: careerforge-api
+summary: "CareerForge API \u2014 Full contract"
+status: active
+approved_by: githeri-review
+approved_commit: local
+generated: true
+generated_by: githeri spec --from-code + manual review
+endpoints:
+- method: POST
+  path: /api/v1/auth/signup
+  requires_auth: false
+  expected_status:
+  - 201
+  - 409
+  - 422
+- method: POST
+  path: /api/v1/auth/login
+  requires_auth: false
+  expected_status:
+  - 200
+  - 401
+  - 422
+- method: POST
+  path: /api/v1/auth/refresh
+  requires_auth: false
+  expected_status:
+  - 200
+  - 401
+  - 422
+- method: POST
+  path: /api/v1/auth/logout
+  requires_auth: true
+  expected_status:
+  - 204
+  - 401
+- method: POST
+  path: /api/v1/auth/forgot-password
+  requires_auth: false
+  expected_status:
+  - 202
+  - 422
+- method: POST
+  path: /api/v1/auth/reset-password
+  requires_auth: false
+  expected_status:
+  - 200
+  - 400
+  - 422
+- method: GET
+  path: /api/v1/auth/verify-email
+  requires_auth: false
+  expected_status:
+  - 200
+  - 400
+  - 404
+  - 422
+- method: GET
+  path: /api/v1/profiles
+  requires_auth: true
+  expected_status:
+  - 200
+  - 401
+- method: POST
+  path: /api/v1/profiles
+  requires_auth: true
+  expected_status:
+  - 201
+  - 401
+  - 422
+- method: GET
+  path: /api/v1/profiles/{profile_id}
+  requires_auth: true
+  expected_status:
+  - 200
+  - 401
+  - 404
+- method: PUT
+  path: /api/v1/profiles/{profile_id}
+  requires_auth: true
+  expected_status:
+  - 200
+  - 401
+  - 404
+  - 422
+- method: DELETE
+  path: /api/v1/profiles/{profile_id}
+  requires_auth: true
+  expected_status:
+  - 204
+  - 401
+  - 404
+- method: PATCH
+  path: /api/v1/profiles/{profile_id}/sections/{section_name}
+  requires_auth: true
+  expected_status:
+  - 200
+  - 401
+  - 404
+  - 422
+- method: POST
+  path: /api/v1/profiles/{profile_id}/set-default
+  requires_auth: true
+  expected_status:
+  - 200
+  - 401
+  - 404
+- method: GET
+  path: /api/v1/profiles/skills/suggestions
+  requires_auth: true
+  expected_status:
+  - 200
+  - 401
+- method: POST
+  path: /api/v1/profiles/import
+  requires_auth: true
+  expected_status:
+  - 201
+  - 401
+  - 422
+- method: GET
+  path: /api/v1/profiles/import/{parse_job_id}
+  requires_auth: true
+  expected_status:
+  - 200
+  - 401
+  - 404
+- method: POST
+  path: /api/v1/generate
+  requires_auth: true
+  expected_status:
+  - 202
+  - 401
+  - 422
+- method: GET
+  path: /api/v1/generate/jobs/{job_id}/cv
+  requires_auth: true
+  expected_status:
+  - 200
+  - 401
+  - 404
+- method: GET
+  path: /api/v1/generate/jobs/{job_id}/cover-letter
+  requires_auth: true
+  expected_status:
+  - 200
+  - 401
+  - 404
+- method: GET
+  path: /api/v1/generate/jobs/{job_id}
+  requires_auth: true
+  expected_status:
+  - 200
+  - 401
+  - 404
+- method: POST
+  path: /api/v1/generate/bulk
+  requires_auth: true
+  expected_status:
+  - 202
+  - 401
+  - 422
+- method: POST
+  path: /api/v1/generate/{job_id}/save
+  requires_auth: true
+  expected_status:
+  - 200
+  - 401
+  - 404
+  - 422
+- method: GET
+  path: /api/v1/generate/library
+  requires_auth: true
+  expected_status:
+  - 200
+  - 401
+- method: GET
+  path: /api/v1/generate/library/{artifact_id}/download
+  requires_auth: true
+  expected_status:
+  - 200
+  - 401
+  - 404
+- method: GET
+  path: /api/v1/llm-config
+  requires_auth: true
+  expected_status:
+  - 200
+  - 401
+- method: POST
+  path: /api/v1/llm-config
+  requires_auth: true
+  expected_status:
+  - 201
+  - 401
+  - 422
+- method: GET
+  path: /api/v1/llm-config/models
+  requires_auth: false
+  expected_status:
+  - 200
+- method: GET
+  path: /api/v1/llm-config/{config_id}
+  requires_auth: true
+  expected_status:
+  - 200
+  - 401
+  - 404
+- method: PUT
+  path: /api/v1/llm-config/{config_id}
+  requires_auth: true
+  expected_status:
+  - 200
+  - 401
+  - 404
+  - 422
+- method: DELETE
+  path: /api/v1/llm-config/{config_id}
+  requires_auth: true
+  expected_status:
+  - 204
+  - 401
+  - 404
+- method: POST
+  path: /api/v1/llm-config/{config_id}/test
+  requires_auth: true
+  expected_status:
+  - 200
+  - 401
+  - 404
+  - 422
+- method: POST
+  path: /api/v1/organizations
+  requires_auth: true
+  expected_status:
+  - 201
+  - 401
+  - 422
+- method: GET
+  path: /api/v1/organizations/{org_id}
+  requires_auth: true
+  expected_status:
+  - 200
+  - 401
+  - 404
+- method: GET
+  path: /api/v1/organizations/{org_id}/members
+  requires_auth: true
+  expected_status:
+  - 200
+  - 401
+  - 404
+- method: DELETE
+  path: /api/v1/organizations/{org_id}/members/{user_id}
+  requires_auth: true
+  expected_status:
+  - 204
+  - 401
+  - 404
+- method: POST
+  path: /api/v1/organizations/{org_id}/invite
+  requires_auth: true
+  expected_status:
+  - 201
+  - 401
+  - 422
+- method: POST
+  path: /api/v1/organizations/invitations/accept
+  requires_auth: true
+  expected_status:
+  - 200
+  - 400
+  - 401
+  - 404
+- method: POST
+  path: /api/v1/organizations/{org_id}/master-profiles
+  requires_auth: true
+  expected_status:
+  - 201
+  - 401
+  - 422
+- method: GET
+  path: /api/v1/organizations/{org_id}/master-profiles
+  requires_auth: true
+  expected_status:
+  - 200
+  - 401
+  - 404
+- method: DELETE
+  path: /api/v1/organizations/{org_id}/master-profiles/{profile_id}
+  requires_auth: true
+  expected_status:
+  - 204
+  - 401
+  - 404
+- method: POST
+  path: /api/v1/organizations/{org_id}/usage/log
+  requires_auth: true
+  expected_status:
+  - 200
+  - 401
+  - 422
+- method: GET
+  path: /api/v1/organizations/{org_id}/usage
+  requires_auth: true
+  expected_status:
+  - 200
+  - 401
+  - 404
+- method: POST
+  path: /api/v1/organizations/{org_id}/usage/reset
+  requires_auth: true
+  expected_status:
+  - 200
+  - 401
+  - 422
+- method: PATCH
+  path: /api/v1/organizations/{org_id}/billing
+  requires_auth: true
+  expected_status:
+  - 200
+  - 401
+  - 404
+  - 422
+- method: POST
+  path: /api/v1/analyzer
+  requires_auth: false
+  expected_status:
+  - 200
+  - 422
+- method: POST
+  path: /api/v1/analyzer/jev
+  requires_auth: false
+  expected_status:
+  - 200
+  - 422
+- method: POST
+  path: /api/v1/billing/checkout-session
+  requires_auth: true
+  expected_status:
+  - 200
+  - 401
+  - 422
+- method: POST
+  path: /api/v1/billing/webhook
+  requires_auth: false
+  expected_status:
+  - 200
+  - 400
+- method: POST
+  path: /api/v1/billing/cancel
+  requires_auth: true
+  expected_status:
+  - 200
+  - 401
+  - 422
+- method: GET
+  path: /api/v1/billing/subscription
+  requires_auth: true
+  expected_status:
+  - 200
+  - 401
+- method: GET
+  path: /api/v1/billing/credit-bundles
+  requires_auth: true
+  expected_status:
+  - 200
+  - 401
+- method: GET
+  path: /api/v1/billing/reconciliation
+  requires_auth: true
+  expected_status:
+  - 200
+  - 401
+- method: GET
+  path: /api/v1/admin/users
+  requires_auth: true
+  expected_status:
+  - 200
+  - 401
+  - 403
+- method: GET
+  path: /api/v1/admin/generation-log
+  requires_auth: true
+  expected_status:
+  - 200
+  - 401
+  - 403
+- method: GET
+  path: /api/v1/admin/metrics
+  requires_auth: true
+  expected_status:
+  - 200
+  - 401
+  - 403
+- method: POST
+  path: /api/v1/feedback
+  requires_auth: true
+  expected_status:
+  - 201
+  - 401
+  - 422
+- method: GET
+  path: /api/v1/feedback/my
+  requires_auth: true
+  expected_status:
+  - 200
+  - 401
