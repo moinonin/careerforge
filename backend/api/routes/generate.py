@@ -1081,4 +1081,12 @@ async def download_artifact(
         if ext == ".pdf"
         else "application/octet-stream"
     )
-    return Response(content=file_bytes, media_type=media_type)
+    # Determine filename from artifact title or artifact_type
+    filename = artifact.title or f"{artifact.artifact_type}"
+    if not filename.endswith(ext):
+        filename = f"{filename}{ext}"
+    return Response(
+        content=file_bytes,
+        media_type=media_type,
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )

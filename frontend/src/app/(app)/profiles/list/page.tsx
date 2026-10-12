@@ -23,10 +23,10 @@ function formatDate(iso: string | null): string {
 }
 
 function completenessRing(score: number): string {
-  if (score >= 80) return "bg-emerald-500"
-  if (score >= 60) return "bg-amber-500"
-  if (score >= 40) return "bg-orange-500"
-  return "bg-red-500"
+  if (score >= 80) return "text-success"
+  if (score >= 60) return "text-warning"
+  if (score >= 40) return "text-warning"
+  return "text-danger"
 }
 
 function completenessLabel(score: number): string {
@@ -83,7 +83,8 @@ export default function ProfilesPage() {
   }, [user, load])
 
   async function handleDelete(id: string) {
-    if (!confirm(`Delete "${profiles.find((p) => p.id === id)?.title}"? This cannot be undone.`)) {
+    const profile = profiles.find((p) => p.id === id)
+    if (!confirm(`Delete "${profile?.title}"? This cannot be undone.`)) {
       return
     }
     setActionLoading(id)
@@ -117,8 +118,14 @@ export default function ProfilesPage() {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-[var(--color-text-faint)] text-sm">Loading…</div>
+      <div className="min-h-screen flex items-center justify-center bg-bg">
+        <div className="flex items-center gap-3 text-text-faint">
+          <svg className="animate-spin w-6 h-6 text-brand-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+            <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
+            <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
+          </svg>
+          <span className="text-sm">Loading…</span>
+        </div>
       </div>
     )
   }
@@ -129,12 +136,12 @@ export default function ProfilesPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text)]">
+    <main className="min-h-screen bg-bg text-text">
       {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <header className="border-b border-[rgba(0,0,0,0.08)] px-6 py-4 flex items-center justify-between">
+      <header className="border-b border-border px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <svg
-            className="w-6 h-6 text-[var(--color-text-medium)]"
+            className="w-6 h-6 text-text-medium"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -144,20 +151,18 @@ export default function ProfilesPage() {
             <path d="M6 15l6 3 6-3" />
             <path d="M6 12h12" />
           </svg>
-          <h1 className="text-lg font-medium tracking-tight text-[var(--color-text-high)]">
-            Resumes
-          </h1>
+          <h1 className="text-lg font-medium tracking-tight text-text">Resumes</h1>
         </div>
         <div className="flex items-center gap-2">
           <a
             href="/profiles"
-            className="text-sm text-[var(--color-text-faint)] hover:text-[var(--color-text-high)] transition-colors"
+            className="btn-secondary btn-sm"
           >
             New resume
           </a>
           <a
             href="/profiles/upload"
-            className="text-sm text-[var(--color-text-faint)] hover:text-[var(--color-text-high)] transition-colors"
+            className="btn-primary btn-sm"
           >
             Upload CV
           </a>
@@ -168,14 +173,20 @@ export default function ProfilesPage() {
       <div className="max-w-3xl mx-auto px-6 py-8">
         {loading ? (
           <div className="flex items-center justify-center py-16">
-            <div className="text-[var(--color-text-faint)] text-sm">Loading profiles…</div>
+            <div className="flex items-center gap-3 text-text-faint">
+              <svg className="animate-spin w-5 h-5 text-brand-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
+                <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
+              </svg>
+              <span className="text-sm">Loading profiles…</span>
+            </div>
           </div>
         ) : profiles.length === 0 ? (
           /* Empty state */
-          <div className="border border-[rgba(0,0,0,0.08)] rounded-xl p-8 text-center">
-            <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-[rgba(0,0,0,0.04)] flex items-center justify-center">
+          <div className="card text-center py-8">
+            <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-surface flex items-center justify-center">
               <svg
-                className="w-6 h-6 text-[var(--color-text-faint)]"
+                className="w-6 h-6 text-text-faint"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
@@ -188,23 +199,21 @@ export default function ProfilesPage() {
                 <polyline points="10,9 9,9 8,9" />
               </svg>
             </div>
-            <h2 className="text-lg font-medium text-[var(--color-text-high)] mb-2">
-              No resumes yet
-            </h2>
-            <p className="text-sm text-[var(--color-text-faint)] mb-6 max-w-sm mx-auto">
+            <h2 className="text-lg font-medium text-text mb-2">No resumes yet</h2>
+            <p className="text-sm text-text-faint mb-6 max-w-sm mx-auto">
               Create your first resume from scratch, or upload an existing CV
               and we'll parse it for you.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
               <a
                 href="/profiles"
-                className="w-full sm:w-auto px-5 py-2.5 rounded-lg bg-[rgba(0,0,0,0.08)] hover:bg-[rgba(0,0,0,0.12)] text-sm font-medium text-[var(--color-text)] transition-colors"
+                className="btn-primary w-full sm:w-auto"
               >
                 Create from scratch
               </a>
               <a
                 href="/profiles/upload"
-                className="w-full sm:w-auto px-5 py-2.5 rounded-lg border border-[rgba(0,0,0,0.12)] hover:border-[rgba(0,0,0,0.15)] text-sm font-medium text-[var(--color-text-high)] hover:text-[var(--color-text)] transition-colors"
+                className="btn-secondary w-full sm:w-auto"
               >
                 Upload CV
               </a>
@@ -217,31 +226,25 @@ export default function ProfilesPage() {
               <article
                 key={profile.id}
                 className={cn(
-                  "border rounded-xl p-4 transition-colors",
+                  "card p-4 transition-colors",
                   profile.is_default
-                    ? "border-amber-500/30 bg-amber-500/5"
-                    : "border-[rgba(0,0,0,0.08)] bg-[rgba(0,0,0,0.02)] hover:bg-[rgba(0,0,0,0.04)]",
+                    ? "border-warning/30 bg-warning-bg"
+                    : "border-border bg-surface hover:bg-surface-hover",
                 )}
               >
                 <div className="flex items-start justify-between gap-4">
                   {/* Left: title + meta */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                      <h2 className="text-base font-medium truncate text-[var(--color-text-high)]">
-                        {profile.title}
-                      </h2>
+                      <h2 className="text-base font-medium truncate text-text">{profile.title}</h2>
                       {profile.is_default && (
-                        <span className="shrink-0 px-2 py-0.5 rounded text-[10px] font-medium uppercase tracking-wider bg-amber-500/20 text-amber-400 border border-amber-500/20">
-                          Default
-                        </span>
+                        <span className="badge badge-warning shrink-0">Default</span>
                       )}
                       {profile.is_draft && (
-                        <span className="shrink-0 px-2 py-0.5 rounded text-[10px] font-medium uppercase tracking-wider bg-[rgba(0,0,0,0.08)] text-[var(--color-text-faint)] border border-[rgba(0,0,0,0.08)]">
-                          Draft
-                        </span>
+                        <span className="badge badge-neutral shrink-0">Draft</span>
                       )}
                     </div>
-                    <div className="flex items-center gap-3 text-xs text-[var(--color-text-faint)]">
+                    <div className="flex items-center gap-3 text-xs text-text-faint">
                       <span>Updated {formatDate(profile.updated_at)}</span>
                       {profile.created_at && (
                         <span>· Created {formatDate(profile.created_at)}</span>
@@ -254,10 +257,7 @@ export default function ProfilesPage() {
                     {/* Completeness gauge */}
                     <div className="flex flex-col items-center">
                       <div className="relative w-12 h-12">
-                        <svg
-                          className="w-12 h-12 -rotate-90"
-                          viewBox="0 0 36 36"
-                        >
+                        <svg className="w-12 h-12 -rotate-90" viewBox="0 0 36 36">
                           <circle
                             cx="18"
                             cy="18"
@@ -265,7 +265,7 @@ export default function ProfilesPage() {
                             fill="none"
                             stroke="currentColor"
                             strokeWidth="2.5"
-                            className="text-[var(--color-text-faint)]"
+                            className="text-text-faint"
                           />
                           <circle
                             cx="18"
@@ -276,17 +276,14 @@ export default function ProfilesPage() {
                             strokeWidth="2.5"
                             strokeDasharray={`${profile.completeness_score * 0.942} 36`}
                             strokeLinecap="round"
-                            className={cn(
-                              "transition-colors",
-                              completenessRing(profile.completeness_score),
-                            )}
+                            className={cn("transition-colors", completenessRing(profile.completeness_score))}
                           />
                         </svg>
-                        <span className="absolute inset-0 flex items-center justify-center text-xs font-medium text-[var(--color-text-high)]">
+                        <span className="absolute inset-0 flex items-center justify-center text-xs font-medium text-text">
                           {profile.completeness_score}
                         </span>
                       </div>
-                      <span className="text-[11px] text-[var(--color-text-faint)] mt-1">
+                      <span className="text-xs text-text-faint mt-1">
                         {completenessLabel(profile.completeness_score)}
                       </span>
                     </div>
@@ -297,24 +294,24 @@ export default function ProfilesPage() {
                         onClick={() => handleSetDefault(profile.id)}
                         disabled={profile.is_default || !!actionLoading}
                         className={cn(
-                          "px-2 py-1 rounded text-xs font-medium transition-colors",
+                          "px-2 py-1 rounded text-xs font-medium transition-colors btn-secondary btn-sm",
                           profile.is_default
-                            ? "text-[var(--color-text-faint)] cursor-not-allowed"
-                            : "text-[var(--color-text-medium)] hover:text-[var(--color-text)] hover:bg-[rgba(0,0,0,0.08)]",
+                            ? "text-text-faint cursor-not-allowed opacity-50"
+                            : "",
                         )}
                       >
                         {actionLoading === profile.id ? "…" : "Set default"}
                       </button>
                       <button
                         onClick={() => router.push(`/profiles?edit=${profile.id}`)}
-                        className="px-2 py-1 rounded text-xs font-medium text-[var(--color-text-medium)] hover:text-[var(--color-text)] hover:bg-[rgba(0,0,0,0.08)] transition-colors"
+                        className="btn-ghost btn-sm px-2 py-1"
                       >
                         Edit
                       </button>
                       <button
                         onClick={() => setDeleteTarget(profile.id)}
                         disabled={!!actionLoading}
-                        className="px-2 py-1 rounded text-xs font-medium text-[var(--color-text-faint)] hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                        className="btn-ghost btn-sm px-2 py-1 text-danger hover:bg-danger-bg hover:text-danger"
                       >
                         Delete
                       </button>
@@ -324,20 +321,18 @@ export default function ProfilesPage() {
 
                 {/* Delete confirmation inline */}
                 {deleteTarget === profile.id && (
-                  <div className="mt-3 pt-3 border-t border-[rgba(0,0,0,0.08)] flex items-center justify-end gap-2">
-                    <span className="text-xs text-[var(--color-text-low)]">
-                      Delete this resume?
-                    </span>
+                  <div className="mt-3 pt-3 border-t border-border flex items-center justify-end gap-2">
+                    <span className="text-xs text-text-low">Delete this resume?</span>
                     <button
                       onClick={() => setDeleteTarget(null)}
-                      className="text-xs px-2 py-1 rounded text-[var(--color-text-medium)] hover:text-[var(--color-text)] transition-colors"
+                      className="btn-ghost btn-sm text-xs"
                     >
                       Cancel
                     </button>
                     <button
                       onClick={() => handleDelete(profile.id)}
                       disabled={!!actionLoading}
-                      className="text-xs px-2 py-1 rounded text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-40"
+                      className="btn-danger btn-sm text-xs"
                     >
                       {actionLoading ? "…" : "Delete"}
                     </button>
@@ -349,16 +344,16 @@ export default function ProfilesPage() {
         )}
 
         {/* Footer CTAs */}
-        <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3 border-t border-[rgba(0,0,0,0.08)] pt-6">
+        <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3 border-t border-border pt-6">
           <a
             href="/profiles"
-            className="w-full sm:w-auto px-5 py-2.5 rounded-lg bg-[rgba(0,0,0,0.08)] hover:bg-[rgba(0,0,0,0.12)] text-sm font-medium text-[var(--color-text)] transition-colors"
+            className="btn-primary w-full sm:w-auto"
           >
             + New resume
           </a>
           <a
             href="/profiles/upload"
-            className="w-full sm:w-auto px-5 py-2.5 rounded-lg border border-[rgba(0,0,0,0.12)] hover:border-[rgba(0,0,0,0.15)] text-sm font-medium text-[var(--color-text-high)] hover:text-[var(--color-text)] transition-colors"
+            className="btn-secondary w-full sm:w-auto"
           >
             Upload CV
           </a>

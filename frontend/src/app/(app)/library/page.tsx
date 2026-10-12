@@ -21,11 +21,14 @@ function filenameFor(doc: LibraryDocument): string {
   return `${base}.${ext}`;
 }
 
+type Tab = "all" | "cv" | "cover-letter";
+
 export default function LibraryPage() {
   const [documents, setDocuments] = useState<LibraryDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<Tab>("all");
 
   useEffect(() => {
     listLibrary()
@@ -46,8 +49,15 @@ export default function LibraryPage() {
     }
   }
 
+  // Filter documents by active tab
+  const filteredDocs = documents.filter((doc) => {
+    if (activeTab === "cv") return doc.artifact_type.startsWith("cv_");
+    if (activeTab === "cover-letter") return doc.artifact_type.startsWith("cl_");
+    return true;
+  });
+
   // Group documents by title so CV + cover letter artifacts sit together.
-  const groups = documents.reduce<Record<string, LibraryDocument[]>>((acc, doc) => {
+  const groups = filteredDocs.reduce<Record<string, LibraryDocument[]>>((acc, doc) => {
     (acc[doc.title] ??= []).push(doc);
     return acc;
   }, {});
@@ -67,6 +77,26 @@ export default function LibraryPage() {
             </Link>
           </div>
 
+          {/* Tab Navigation */}
+          <div className="dashboard-tabs" style={{ marginBottom: "1rem" }}>
+            {(["all", "cv", "cover-letter"] as const).map((tab) => (
+              <button
+                key={tab}
+                className={`dashboard-tab ${activeTab === tab ? "active" : ""}`}
+                onClick={() => setActiveTab(tab)}
+              >
+                {tab === "all" ? "All" : tab === "cv" ? "Resumes" : "Cover Letters"}
+                <span className="badge badge-neutral ml-2">
+                  {tab === "all"
+                    ? documents.length
+                    : tab === "cv"
+                    ? documents.filter((d) => d.artifact_type.startsWith("cv_")).length
+                    : documents.filter((d) => d.artifact_type.startsWith("cl_")).length}
+                </span>
+              </button>
+            ))}
+          </div>
+
           {error && (
             <div className="dashboard-generation-error"><p>{error}</p></div>
           )}
@@ -77,7 +107,7 @@ export default function LibraryPage() {
             <div className="dashboard-empty-state">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="dashboard-empty-icon">
                 <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
-                <polyline points="14 2 14 8 20 8" />
+                <polyline points="14,2 14,8 20,8" />
               </svg>
               <h3>No documents yet</h3>
               <p>Generate your first CV and save it to the library.</p>
@@ -128,4 +158,20 @@ export default function LibraryPage() {
       </div>
     </AppShell>
   );
+}
+
+// Filter and group logic (outside component for SSR compatibility)
+function getFilteredDocs(documents: LibraryDocument[], activeTab: "all" | "cv" | "cover-letter") {
+  return documents.filter((doc) => {
+    if (activeTab === "cv") return doc.artifact_type.startsWith("cv_");
+    if (activeTab === "cover-letter") return doc.artifact_type.startsWith("cl_");
+    return true;
+  });
+}
+
+function groupDocs(docs: LibraryDocument[]) {
+  return docs.reduce<Record<string, LibraryDocument[]>>((acc, doc) => {
+    (acc[doc.title] ??= []).push(doc);
+    return acc;
+  }, {});
 }

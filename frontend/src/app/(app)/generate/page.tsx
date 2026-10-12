@@ -344,6 +344,9 @@ export default function GeneratePage() {
                     Save to Library
                   </button>
                 </div>
+                <p className="dashboard-form-hint" style={{color: 'var(--color-brand-500)', fontWeight: 500}}>
+                  💡 Downloads are temporary. Click "Save to Library" to keep them permanently in your Document Library.
+                </p>
 
                 {savedMsg && <p className="dashboard-form-hint">✓ {savedMsg}</p>}
 

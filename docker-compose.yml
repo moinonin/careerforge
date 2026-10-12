@@ -1,4 +1,3 @@
-version: "3.9"
 
 services:
   # ── PostgreSQL ───────────────────────────────────────────────────────────
@@ -53,8 +52,8 @@ services:
       CAREERFORGE_RESULT_BACKEND: redis://redis:6379/0
       CAREERFORGE_ENVIRONMENT: development
       CAREERFORGE_DEBUG: "true"
-      CAREERFORGE_CORS_ORIGINS: http://localhost:3000
-      CAREERFORGE_JWT_SECRET: change-me-in-production-please
+      CAREERFORGE_CORS_ORIGINS: "[\"http://localhost:3000\"]"
+      CAREERFORGE_JWT_SECRET: dev-secret-change-in-production
       CAREERFORGE_ACCESS_TOKEN_EXPIRE_MINUTES: "60"
       CAREERFORGE_REFRESH_TOKEN_EXPIRE_DAYS: "7"
       CAREERFORGE_DEFAULT_LLM_PROVIDER: openai

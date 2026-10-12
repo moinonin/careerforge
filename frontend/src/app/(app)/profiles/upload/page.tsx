@@ -77,13 +77,11 @@ export default function UploadPage() {
           setMessage(s.message ?? "Parse failed")
           return
         }
-        // Progress estimation: queued → parsing → completed
         setProgress(Math.min(10 + attempts * 3, 90))
       } catch {
         // Keep polling on transient errors
       }
     }
-    // Timeout — assume still parsing
     setProgress(90)
   }
 
@@ -112,8 +110,14 @@ export default function UploadPage() {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-[var(--color-text-faint)] text-sm">Loading…</div>
+      <div className="min-h-screen flex items-center justify-center bg-bg">
+        <div className="flex items-center gap-3 text-text-faint">
+          <svg className="animate-spin w-6 h-6 text-brand-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+            <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
+            <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
+          </svg>
+          <span className="text-sm">Loading…</span>
+        </div>
       </div>
     )
   }
@@ -124,12 +128,12 @@ export default function UploadPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text)]">
+    <main className="min-h-screen bg-bg text-text">
       {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <header className="border-b border-[rgba(0,0,0,0.08)] px-6 py-4 flex items-center justify-between">
+      <header className="border-b border-border px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <svg
-            className="w-6 h-6 text-[var(--color-text-medium)]"
+            className="w-6 h-6 text-text-medium"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -139,15 +143,13 @@ export default function UploadPage() {
             <polyline points="17,8 12,3 7,8" />
             <line x1="12" y1="3" x2="12" y2="15" />
           </svg>
-          <h1 className="text-lg font-medium tracking-tight text-[var(--color-text-high)]">
-            Upload CV
-          </h1>
+          <h1 className="text-lg font-medium tracking-tight text-text">Upload CV</h1>
         </div>
         <button
           onClick={() => router.push("/profiles")}
-          className="text-sm text-[var(--color-text-faint)] hover:text-[var(--color-text-high)] transition-colors"
+          className="text-sm text-text-faint hover:text-text transition-colors"
         >
-          Back to resumes
+          Back to profiles
         </button>
       </header>
 
@@ -158,8 +160,8 @@ export default function UploadPage() {
           <div
             className={`mb-6 px-4 py-3 rounded-lg text-sm ${
               status === "error"
-                ? "bg-red-500/10 text-red-400 border border-red-500/20"
-                : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                ? "bg-danger-bg text-danger border-danger"
+                : "bg-warning-bg text-warning border-warning"
             }`}
           >
             {message}
@@ -174,8 +176,8 @@ export default function UploadPage() {
             onDragLeave={handleDragLeave}
             className={`border-2 border-dashed rounded-xl p-10 text-center transition-colors cursor-pointer ${
               status === "dragging"
-                ? "border-amber-500/40 bg-amber-500/5"
-                : "border-[rgba(0,0,0,0.12)] hover:border-[rgba(0,0,0,0.15)] hover:bg-[rgba(0,0,0,0.02)]"
+                ? "border-brand-500/40 bg-brand-500/5"
+                : "border-border hover:border-border-strong hover:bg-surface-hover"
             }`}
             onClick={() => fileInputRef.current?.click()}
           >
@@ -186,9 +188,9 @@ export default function UploadPage() {
               onChange={handleInputChange}
               className="hidden"
             />
-            <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-[rgba(0,0,0,0.04)] flex items-center justify-center">
+            <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-surface flex items-center justify-center">
               <svg
-                className="w-6 h-6 text-[var(--color-text-faint)]"
+                className="w-6 h-6 text-text-faint"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
@@ -199,14 +201,10 @@ export default function UploadPage() {
                 <line x1="12" y1="3" x2="12" y2="15" />
               </svg>
             </div>
-            <p className="text-sm text-[var(--color-text-medium)] mb-1">
-              Drag and drop your CV here
-            </p>
-            <p className="text-xs text-[var(--color-text-faint)] mb-4">
-              or click to browse — PDF or DOCX, up to 5 MB
-            </p>
+            <p className="text-sm text-text-medium mb-1">Drag and drop your CV here</p>
+            <p className="text-xs text-text-faint mb-4">or click to browse — PDF or DOCX, up to 5 MB</p>
             {selectedFile && (
-              <p className="text-xs text-[var(--color-text-low)]">
+              <p className="text-xs text-text-low">
                 Selected: {selectedFile.name} ({Math.round(selectedFile.size / 1024)} KB)
               </p>
             )}
@@ -217,7 +215,7 @@ export default function UploadPage() {
                   e.stopPropagation()
                   fileInputRef.current?.click()
                 }}
-                className="mt-2 px-4 py-2 rounded-lg bg-[rgba(0,0,0,0.08)] hover:bg-[rgba(0,0,0,0.12)] text-sm text-[var(--color-text)] transition-colors"
+                className="mt-2 px-4 py-2 rounded-lg bg-surface hover:bg-surface-hover text-sm text-text transition-colors border border-border"
               >
                 Choose file
               </button>
@@ -227,12 +225,10 @@ export default function UploadPage() {
 
         {/* File selected + upload button */}
         {selectedFile && status === "uploading" && (
-          <div className="mt-4 flex items-center justify-between gap-4 p-4 border border-[rgba(0,0,0,0.08)] rounded-xl">
+          <div className="mt-4 flex items-center justify-between gap-4 p-4 border border-border rounded-xl bg-surface">
             <div>
-              <p className="text-sm font-medium text-[var(--color-text-high)]">{selectedFile.name}</p>
-              <p className="text-xs text-[var(--color-text-faint)]">
-                {Math.round(selectedFile.size / 1024)} KB
-              </p>
+              <p className="text-sm font-medium text-text">{selectedFile.name}</p>
+              <p className="text-xs text-text-faint">{Math.round(selectedFile.size / 1024)} KB</p>
             </div>
             <div className="flex items-center gap-3">
               <button
@@ -243,13 +239,13 @@ export default function UploadPage() {
                   setMessage(null)
                   setProgress(0)
                 }}
-                className="text-xs text-[var(--color-text-faint)] hover:text-[var(--color-text)] transition-colors"
+                className="text-xs text-text-faint hover:text-text transition-colors"
               >
                 Remove
               </button>
               <button
                 onClick={startUpload}
-                className="px-4 py-2 rounded-lg bg-[rgba(0,0,0,0.08)] hover:bg-[rgba(0,0,0,0.12)] text-sm font-medium text-[var(--color-text)] transition-colors"
+                className="btn-primary btn-sm"
               >
                 Upload & parse
               </button>
@@ -259,33 +255,29 @@ export default function UploadPage() {
 
         {/* Parsing progress */}
         {(status === "uploading" || status === "parsing") && parseJobId && (
-          <div className="mt-6 p-4 border border-[rgba(0,0,0,0.08)] rounded-xl">
+          <div className="mt-6 p-4 border border-border rounded-xl bg-surface">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm text-[var(--color-text-medium)]">
+              <span className="text-sm text-text-medium">
                 {status === "uploading" ? "Uploading…" : "Parsing CV…"}
               </span>
-              <span className="text-xs text-[var(--color-text-faint)] font-mono">
-                {progress}%
-              </span>
+              <span className="text-xs text-text-faint font-mono">{progress}%</span>
             </div>
-            <div className="w-full h-1.5 rounded-full bg-[rgba(0,0,0,0.08)] overflow-hidden">
+            <div className="w-full h-1.5 rounded-full bg-surface-hover overflow-hidden">
               <div
-                className="h-full rounded-full bg-amber-500 transition-all duration-300"
+                className="h-full rounded-full bg-brand-600 transition-all duration-300"
                 style={{ width: `${progress}%` }}
               />
             </div>
-            <p className="text-xs text-[var(--color-text-faint)] mt-2">
-              Job ID: {parseJobId.slice(0, 8)}…
-            </p>
+            <p className="text-xs text-text-faint mt-2">Job ID: {parseJobId.slice(0, 8)}…</p>
           </div>
         )}
 
         {/* Done state */}
         {status === "done" && (
-          <div className="mt-6 p-4 border border-emerald-500/20 rounded-xl bg-emerald-500/5">
+          <div className="mt-6 p-4 border border-success/20 rounded-xl bg-success-bg">
             <div className="flex items-center gap-2 mb-3">
               <svg
-                className="w-5 h-5 text-emerald-400"
+                className="w-5 h-5 text-success"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
@@ -293,12 +285,10 @@ export default function UploadPage() {
               >
                 <polyline points="20,6 9,17 4,12" />
               </svg>
-              <span className="text-sm font-medium text-emerald-400">
-                CV imported successfully
-              </span>
+              <span className="text-sm font-medium text-success">CV imported successfully</span>
             </div>
 
-            <p className="text-xs text-[var(--color-text-faint)] mb-4">
+            <p className="text-xs text-text-faint mb-4">
               Your profile has been created from the uploaded CV.
               You&apos;re taken directly to your profile editor.
             </p>
@@ -312,7 +302,7 @@ export default function UploadPage() {
                     router.push(`/profiles?imported=true`)
                   }
                 }}
-                className="w-full sm:w-auto px-5 py-2.5 rounded-lg bg-[rgba(0,0,0,0.08)] hover:bg-[rgba(0,0,0,0.12)] text-sm font-medium text-[var(--color-text)] transition-colors"
+                className="w-full sm:w-auto px-5 py-2.5 rounded-lg btn-primary"
               >
                 View profile
               </button>
@@ -327,7 +317,7 @@ export default function UploadPage() {
                   setMessage(null)
                   if (fileInputRef.current) fileInputRef.current.value = ""
                 }}
-                className="text-sm text-[var(--color-text-faint)] hover:text-[var(--color-text-high)] transition-colors"
+                className="text-sm text-text-faint hover:text-text transition-colors"
               >
                 Upload another
               </button>
@@ -337,10 +327,10 @@ export default function UploadPage() {
 
         {/* Error state */}
         {status === "error" && (
-          <div className="mt-6 p-4 border border-red-500/20 rounded-xl bg-red-500/5 text-center">
+          <div className="mt-6 p-4 border border-danger/20 rounded-xl bg-danger-bg text-center">
             <div className="flex items-center gap-2 mb-3 justify-center">
               <svg
-                className="w-5 h-5 text-red-400"
+                className="w-5 h-5 text-danger"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
@@ -350,11 +340,9 @@ export default function UploadPage() {
                 <line x1="15" y1="9" x2="9" y2="15" />
                 <line x1="9" y1="9" x2="15" y2="15" />
               </svg>
-              <span className="text-sm font-medium text-red-400">
-                Something went wrong
-              </span>
+              <span className="text-sm font-medium text-danger">Something went wrong</span>
             </div>
-            <p className="text-xs text-[var(--color-text-faint)] mb-4">{message}</p>
+            <p className="text-xs text-text-faint mb-4">{message}</p>
             <button
               onClick={() => {
                 setStatus("idle")
@@ -366,7 +354,7 @@ export default function UploadPage() {
                 setSelectedFile(null)
                 if (fileInputRef.current) fileInputRef.current.value = ""
               }}
-              className="text-sm px-4 py-2 rounded-lg bg-[rgba(0,0,0,0.08)] hover:bg-[rgba(0,0,0,0.12)] text-[var(--color-text)] transition-colors"
+              className="btn-secondary btn-sm"
             >
               Try again
             </button>
@@ -374,9 +362,9 @@ export default function UploadPage() {
         )}
 
         {/* Info note */}
-        <div className="mt-8 p-4 border border-[rgba(0,0,0,0.04)] rounded-xl">
-          <p className="text-xs text-[var(--color-text-faint)] leading-relaxed">
-            Upload a PDF or DOCX of your existing CV. We'll extract your contact
+        <div className="mt-8 p-4 border border-border rounded-xl bg-surface">
+          <p className="text-xs text-text-faint leading-relaxed">
+            Upload a PDF or DOCX of your existing CV. We&apos;ll extract your contact
             details, work history, education, and skills, then take you to the
             wizard where you can review and refine everything before saving.
           </p>
