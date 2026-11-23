@@ -37,7 +37,7 @@ class AnalyzerResponse(BaseModel):
     implied_skills: list[str]
     red_flags: list[str]
     salary_estimate: dict[str, Any] | None
-    company_research: dict[str, Any] | None
+    company_research: dict[str, Any] | str | None
     keyword_coverage: dict[str, Any] | None = None
 
 
@@ -103,17 +103,169 @@ def _normalize_skill_list(data: Any) -> list[str]:
     return []
 
 
+_SALARY_BRACKET_LABELS: dict[str, str] = {
+    "under_80k": "$60,000 - $80,000",
+    "80k_120k": "$80,000 - $120,000",
+    "120k_160k": "$120,000 - $160,000",
+    "160k_200k": "$160,000 - $200,000",
+    "200k_plus": "$200,000+",
+}
+
+_KNOWN_SKILLS: tuple[str, ...] = (
+    "Python", "FastAPI", "Django", "Flask", "C++", "Rust", "Java", "Kotlin", "Go",
+    "TypeScript", "JavaScript", "React", "Next.js", "Node.js", "SQL", "PostgreSQL",
+    "Redis", "Docker", "Kubernetes", "AWS", "GCP", "Azure", "Terraform", "Linux",
+    "PyTorch", "TensorFlow", "Scikit-Learn", "Spark", "Kafka", "GraphQL", "gRPC",
+    "ANSYS", "MATLAB", "CFD", "Git", "CI/CD", "Machine Learning", "Statistical Modeling",
+    "Market Microstructure", "Systematic Trading",
+)
+
+
+_RED_FLAG_RULES: tuple[tuple[str, str], ...] = (
+    (
+        r"\b(unpaid\s+overtime|unpaid\s+weekend|70[\s-]?hour|60[\s-]?hour|mandatory\s+overtime|nights?\s+and\s+weekends?)\b",
+        "Excessive hours or unpaid overtime expectations mentioned.",
+    ),
+    (
+        r"\b(rockstar|ninja|guru|10x\s+engineer|wear\s+(?:many|every)\s+hats?)\b",
+        "Buzzword-heavy framing ('rockstar/ninja/wear every hat') — clarify actual role boundaries.",
+    ),
+    (
+        r"\b(equity[\s-]?only|unpaid\s+trial|salary\s+tbd|compensation\s+tbd)\b",
+        "Unclear or deferred cash compensation (equity-only / TBD).",
+    ),
+    (
+        r"\b(fast[\s-]?paced\s+family|like\s+a\s+family|work\s+hard\s+play\s+hard)\b",
+        "Culture phrasing ('like a family' / 'work hard play hard') can signal weak work-life boundaries.",
+    ),
+    (
+        r"\b(no\s+clear\s+(?:job\s+)?scope|duties\s+as\s+assigned\s+with\s+no\s+limits)\b",
+        "Vague or unbounded role scope.",
+    ),
+)
+
+
+async def _fetch_company_research(
+    company_name: str | None,
+    job_description: str,
+    *,
+    domain: str | None = None,
+    tech_stack: list[str] | None = None,
+) -> dict[str, Any]:
+    """Fetch brief verified company context (Wikipedia REST API) + JD clues."""
+    stack_str = ", ".join(tech_stack[:6]) if tech_stack else None
+    if company_name and company_name.strip():
+        clean_name = company_name.strip()
+        try:
+            import urllib.parse
+
+            import httpx
+
+            slug = urllib.parse.quote(clean_name.replace(" ", "_"))
+            url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{slug}"
+            async with httpx.AsyncClient(timeout=3.0, follow_redirects=True) as http:
+                resp = await http.get(url, headers={"User-Agent": "CareerForgeAI/1.0"})
+                if resp.status_code == 200:
+                    data = resp.json()
+                    extract = str(data.get("extract") or "").strip()
+                    if extract and data.get("type") != "disambiguation":
+                        return {
+                            "company": data.get("title") or clean_name,
+                            "summary": extract[:500],
+                            "domain": data.get("description") or domain,
+                            "technology_stack": stack_str,
+                            "source": data.get("content_urls", {}).get("desktop", {}).get("page"),
+                        }
+        except Exception:
+            pass
+
+        return {
+            "company": clean_name,
+            "summary": (
+                f"No public encyclopedia entry found for {clean_name}. "
+                "Verify company stage, funding, team size, and engineering culture during interviews."
+            ),
+            "domain": domain,
+            "technology_stack": stack_str,
+            "source": None,
+        }
+
+    return {
+        "company": None,
+        "summary": (
+            "Enter a company name above to look up public background, "
+            "or verify company stage, team structure, and compensation bands before applying."
+        ),
+        "domain": domain,
+        "technology_stack": stack_str,
+        "source": None,
+    }
+
+
+async def _fallback_s1_analyzer(
+    job_description: str,
+    company_name: str | None,
+) -> dict[str, Any]:
+    """Local CareerForge-S1 fallback when the external LLM endpoint is unavailable."""
+    from backend.s1 import get_decision_client
+
+    async with get_decision_client() as client:
+        s1 = await client.analyze_job(job_description, company_name)
+
+    lower = job_description.lower()
+    found_skills = [s for s in _KNOWN_SKILLS if re.search(rf"\b{re.escape(s.lower())}\b", lower)]
+    if not found_skills and s1.tech_stack:
+        found_skills = [s1.tech_stack.choice.replace("_", " ").title()]
+
+    implied: list[str] = []
+    if s1.skill_category:
+        implied.append(f"{s1.skill_category.choice.title()} Engineering")
+    if s1.seniority_level:
+        sen_idx = str(int(round(s1.seniority_level.score)))
+        sen_label = s1.seniority_level.legend.get(sen_idx, "Mid-Senior")
+        implied.append(f"{sen_label.title()}-level ownership")
+    if s1.remote_ok and s1.remote_ok.value >= 0.5:
+        implied.append("Async / distributed collaboration")
+
+    red_flags: list[str] = [
+        msg for pattern, msg in _RED_FLAG_RULES if re.search(pattern, lower)
+    ]
+    if not red_flags and s1.has_red_flags and s1.has_red_flags.value >= 0.65:
+        red_flags.append(
+            f"Potential job posting red flags detected ({s1.has_red_flags.value:.0%} confidence) — "
+            "review role scope, working hours, and compensation transparency."
+        )
+
+    bracket = s1.salary_bracket.choice if s1.salary_bracket else "120k_160k"
+    salary_estimate = {
+        "range": _SALARY_BRACKET_LABELS.get(bracket, "$100,000 - $150,000"),
+        "currency": "USD",
+        "location": "Remote" if (s1.remote_ok and s1.remote_ok.value >= 0.5) else "Onsite / Hybrid",
+    }
+    domain_label = (
+        f"{s1.skill_category.choice.title()} Engineering" if s1.skill_category else None
+    )
+    company_summary = await _fetch_company_research(
+        company_name,
+        job_description,
+        domain=domain_label,
+        tech_stack=found_skills,
+    )
+    return {
+        "required_skills": found_skills,
+        "implied_skills": implied,
+        "red_flags": red_flags,
+        "salary_estimate": salary_estimate,
+        "company_research": company_summary,
+        "keyword_coverage": None,
+    }
+
+
 async def _run_analyzer(
     job_description: str,
     company_name: str | None,
 ) -> dict[str, Any]:
-    """Build the analyzer prompt and call the LLM.
-
-    Returns a dict with required_skills, implied_skills, red_flags,
-    salary_estimate, and company_research.
-    """
-    adapter = build_adapter()
-
+    """Build the analyzer prompt and call the LLM, falling back to CareerForge-S1 on error."""
     prompt = _build_analyzer_prompt(job_description, company_name)
 
     schema: dict[str, Any] = {
@@ -144,7 +296,11 @@ async def _run_analyzer(
         "required": ["required_skills", "implied_skills", "red_flags"],
     }
 
-    response = await adapter.generate(prompt, schema)
+    try:
+        adapter = build_adapter()
+        response = await adapter.generate(prompt, schema)
+    except Exception:
+        return await _fallback_s1_analyzer(job_description, company_name)
 
     result: dict[str, Any] = {
         "required_skills": _normalize_skill_list(response.get("required_skills", [])),

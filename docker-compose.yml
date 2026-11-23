@@ -39,6 +39,8 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     container_name: careerforge-backend
     depends_on:
       postgres:
@@ -56,8 +58,10 @@ services:
       CAREERFORGE_JWT_SECRET: dev-secret-change-in-production
       CAREERFORGE_ACCESS_TOKEN_EXPIRE_MINUTES: "60"
       CAREERFORGE_REFRESH_TOKEN_EXPIRE_DAYS: "7"
-      CAREERFORGE_DEFAULT_LLM_PROVIDER: openai
-      CAREERFORGE_DEFAULT_LLM_MODEL: gpt-4o-mini
+      CAREERFORGE_DEFAULT_LLM_PROVIDER: ollama
+      CAREERFORGE_DEFAULT_LLM_MODEL: qwen2.5-coder:7b-instruct
+      CAREERFORGE_OLLAMA_BASE_URL: http://host.docker.internal:11434
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
       CAREERFORGE_EMAIL_PROVIDER: resend
       CAREERFORGE_EMAIL_FROM_ADDRESS: noreply@careerforge.ai
       CAREERFORGE_EMAIL_FROM_NAME: CareerForge AI

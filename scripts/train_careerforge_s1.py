@@ -137,6 +137,8 @@ def _build_seed_jds() -> list[dict[str, Any]]:
     red_flag_phrases = [
         (0.0, "Clear roadmap, transparent compensation, structured interview process, healthy work-life balance."),
         (0.0, "Well-scoped responsibilities, collaborative code reviews, dedicated learning budget."),
+        (0.0, "Competitive salary, standard 40-hour week, supportive engineering culture, clear career progression."),
+        (0.0, "Direct collaboration with researchers and engineers, clear technical goals, strong benefits package."),
         (
             1.0,
             "Looking for a 10x rockstar ninja willing to wear every hat, work 70-hour weeks, "
@@ -153,12 +155,13 @@ def _build_seed_jds() -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     idx = 0
     for cat, stack, base_desc, extras in templates:
-        for sen_num, sen_label, sal_bracket, sen_desc in seniority_specs:
+        for _sen_num, sen_label, sal_bracket, sen_desc in seniority_specs:
             # Generate 2 distinct variations per (template, seniority) = 144 JDs
+            # Independently sample remote vs red_flags so onsite never correlates with red_flags
             for rep in range(2):
                 picked_extras = rng.sample(extras, k=3)
-                rem_val, rem_txt = remote_phrases[(idx + rep) % len(remote_phrases)]
-                red_val, red_txt = red_flag_phrases[(idx + rep * 2) % len(red_flag_phrases)]
+                rem_val, rem_txt = rng.choice(remote_phrases)
+                red_val, red_txt = rng.choice(red_flag_phrases)
                 title = f"{sen_label.title()} {cat.title()} Engineer"
                 jd = (
                     f"Title: {title}\n"

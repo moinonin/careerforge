@@ -16,6 +16,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # ── Install deps first (cached layer) ──────────────────────────────────────
 COPY pyproject.toml README.md ./
 COPY backend/ ./backend/
+COPY alembic.ini ./
+COPY backend/alembic ./backend/alembic
 
 RUN python -m venv .venv \
     && .venv/bin/pip install --upgrade pip \

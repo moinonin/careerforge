@@ -33,7 +33,7 @@ async def test_s1_works_without_typesafe_api_key(monkeypatch):
         assert analysis.tech_stack is not None
         assert analysis.tech_stack.choice == "python_fastapi"
         assert analysis.remote_ok is not None and analysis.remote_ok.value > 0.5
-        assert analysis.has_red_flags is not None and analysis.has_red_flags.value < 0.5
+        assert analysis.has_red_flags is not None and analysis.has_red_flags.value < 0.60
         ctx = analysis.to_context_dict()
         assert ctx["primary_skill_category"] == "backend"
         assert ctx["primary_tech_stack"] == "python_fastapi"

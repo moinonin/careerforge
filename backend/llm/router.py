@@ -29,10 +29,11 @@ def _ensure_registries() -> None:
 def get_default_provider() -> str:
     """Return the default LLM provider slug.
 
-    Reads ``LLM_PROVIDER`` env var; falls back to ``"openai"``.
+    Reads from backend.config.settings.
     """
     _ensure_registries()
-    return os.environ.get("LLM_PROVIDER", "openai").lower()
+    from backend.config import settings
+    return settings.default_llm_provider.lower()
 
 
 async def get_user_active_config(session: AsyncSession, user_id: str) -> LLMConfig | None:

@@ -98,6 +98,15 @@ export function AppShell({
 
   useEffect(() => setMounted(true), []);
 
+  useEffect(() => {
+    if (!mobileOpen) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setMobileOpen(false);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [mobileOpen]);
+
   const isDark = !mounted || theme !== "light";
 
   function navLink(item: (typeof NAV_ITEMS)[number]) {
@@ -116,15 +125,31 @@ export function AppShell({
   }
 
   const sidebar = (
-    <aside className="app-sidebar">
-      <Link href="/" className="app-sidebar-brand">
-        <span className="app-logo-mark">CF</span>
-        <span>CareerForge</span>
-      </Link>
+    <aside
+      className={`app-sidebar${mobileOpen ? " open" : ""}`}
+      aria-label="Primary navigation"
+    >
+      <div className="app-sidebar-brand">
+        <Link href="/" className="flex items-center gap-3" onClick={() => setMobileOpen(false)}>
+          <span className="app-logo-mark">CF</span>
+          <span>CareerForge</span>
+        </Link>
+        <button
+          type="button"
+          className="app-sidebar-close"
+          onClick={() => setMobileOpen(false)}
+          aria-label="Close navigation menu"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
       <nav className="app-nav">{NAV_ITEMS.map(navLink)}</nav>
       <nav className="app-nav" style={{ flex: "0 0 auto", borderTop: "1px solid var(--color-border)", paddingTop: "0.75rem" }}>
         {BOTTOM_NAV.map(navLink)}
         <button
+          type="button"
           className="app-nav-item"
           style={{ background: "transparent", cursor: "pointer", width: "100%", textAlign: "left" }}
           onClick={() => setTheme(isDark ? "light" : "dark")}
@@ -141,6 +166,7 @@ export function AppShell({
           <span>{isDark ? "Light mode" : "Dark mode"}</span>
         </button>
         <button
+          type="button"
           className="app-nav-item"
           style={{ background: "transparent", cursor: "pointer", width: "100%", textAlign: "left" }}
           onClick={() => logout()}
@@ -148,7 +174,7 @@ export function AppShell({
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" />
           </svg>
-          <span>Log out{user?.email ? ` (${user.email})` : ""}</span>
+          <span className="truncate">Log out{user?.email ? ` (${user.email})` : ""}</span>
         </button>
       </nav>
     </aside>
@@ -156,14 +182,35 @@ export function AppShell({
 
   return (
     <div className="app-shell">
+      <div
+        className={`app-backdrop${mobileOpen ? " open" : ""}`}
+        onClick={() => setMobileOpen(false)}
+        aria-hidden="true"
+      />
       {sidebar}
       <div className="app-main">
-        <header className="app-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div>
-            <h1 className="app-title">{title}</h1>
-            {subtitle && <p className="app-subtitle">{subtitle}</p>}
+        <header
+          className="app-header"
+          style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap" }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", minWidth: 0 }}>
+            <button
+              type="button"
+              className="app-mobile-toggle"
+              onClick={() => setMobileOpen(true)}
+              aria-label="Open navigation menu"
+              aria-expanded={mobileOpen}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" />
+              </svg>
+            </button>
+            <div style={{ minWidth: 0 }}>
+              <h1 className="app-title truncate">{title}</h1>
+              {subtitle && <p className="app-subtitle">{subtitle}</p>}
+            </div>
           </div>
-          {actions && <div>{actions}</div>}
+          {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
         </header>
         <div className="app-content">{children}</div>
       </div>

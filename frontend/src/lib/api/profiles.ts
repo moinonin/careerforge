@@ -1,12 +1,28 @@
-import { getToken } from "@/lib/token-store"
+import { refreshTokens } from "@/lib/auth"
+import { clearToken, getToken } from "@/lib/token-store"
 
 const API_BASE = "/api/v1";
+
+let _inflightRefresh: Promise<boolean> | null = null;
+
+async function _tryRefreshToken(): Promise<boolean> {
+  if (!_inflightRefresh) {
+    _inflightRefresh = refreshTokens()
+      .then(() => true)
+      .catch(() => false)
+      .finally(() => {
+        _inflightRefresh = null;
+      });
+  }
+  return _inflightRefresh;
+}
 
 async function _request<T>(
   path: string,
   body?: unknown,
   method?: string,
   query?: Record<string, string>,
+  _retried = false,
 ): Promise<T> {
   let url = `${API_BASE}${path}`;
   if (query) {
@@ -29,6 +45,18 @@ async function _request<T>(
   };
 
   const res = await fetch(url, opts);
+
+  if (res.status === 401 && !_retried) {
+    const refreshed = await _tryRefreshToken();
+    if (refreshed) {
+      return _request<T>(path, body, method, query, true);
+    }
+    clearToken();
+    if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+      window.location.href = "/login";
+    }
+    throw new Error("Session expired — please sign in again.");
+  }
 
   if (res.status === 204) {
     return undefined as T;
