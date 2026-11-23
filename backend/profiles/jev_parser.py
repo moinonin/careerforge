@@ -16,7 +16,8 @@ import logging
 import re
 from typing import Any
 
-from backend.jev import JevClient, JevProfileAnalysis
+from backend.jev import JevProfileAnalysis
+from backend.s1 import get_decision_client
 from backend.profiles.cv_parser import extract_sections, extract_text
 from backend.profiles.schemas import (
     CertificationEntry,
@@ -58,7 +59,7 @@ async def parse_cv_with_jev(file_bytes: bytes, filename: str) -> MasterProfileDa
     # ── Run Jev validation ──────────────────────────────────
     jev: JevProfileAnalysis | None = None
     try:
-        async with JevClient() as client:
+        async with get_decision_client() as client:
             jev = await client.analyze_cv(cv_text=cv_text)
         logger.info(
             "Jev CV analysis: %d input tokens, seniority=%.1f, publications=%.2f",

@@ -305,49 +305,153 @@ def _fmt_languages(lang_list: list[LanguageEntry]) -> str:
 # ``{role_context}`` are filled by ``assemble_prompt`` below.
 
 
+# ── Domain-track routing (generalized from NotebookLM extended_master_prompt) ──
+
+DOMAIN_TRACK_GUIDANCE: dict[str, str] = {
+    "academic_research": (
+        "TARGET TRACK: Academic / Postdoc / Research.\n"
+        "- Emphasize doctoral/graduate research, peer-reviewed publications, citation metrics, "
+        "grant writing/compliance, student supervision/mentorship, and first-principles methodology.\n"
+        "- Allow a thorough 2-3+ page CV with full publication citations and thesis details.\n"
+        "- Tone: rigorous, methodology-driven, formal."
+    ),
+    "physical_engineering": (
+        "TARGET TRACK: Physical / Process / Aerospace / Industrial Engineering.\n"
+        "- Emphasize numerical/physical modeling (1D/3D, CFD, kinetics, thermodynamics, heat/mass transfer), "
+        "laboratory/test-rig instrumentation, experimental validation, and process optimization.\n"
+        "- Translate any software/quant/ML roles explicitly into physical modeling, sensor/DAQ pipelines, "
+        "digital twins, or control loops under uncertainty.\n"
+        "- Target a crisp 1-2 page ATS CV."
+    ),
+    "quant_software": (
+        "TARGET TRACK: Quantitative Research / Systems / Software Engineering.\n"
+        "- Emphasize production architecture, low-latency systems, numerical optimization, time-series/statistical "
+        "modeling, automated execution/control loops, cloud/Linux infrastructure, and measurable impact.\n"
+        "- Target a crisp 1-2 page ATS CV."
+    ),
+    "ai_ml": (
+        "TARGET TRACK: AI / Machine Learning / Foundation Models.\n"
+        "- Emphasize ML architectures, training/evaluation pipelines, alignment/safety/robustness, "
+        "PyTorch/TensorFlow/LLM tooling, and production model deployment.\n"
+        "- Target a crisp 1-2 page ATS CV."
+    ),
+    "general_industry": (
+        "TARGET TRACK: General Industry.\n"
+        "- Emphasize measurable business outcomes, ownership, domain alignment, and cross-functional impact.\n"
+        "- Target a crisp 1-2 page ATS CV."
+    ),
+}
+
+
+def detect_target_domain(job_description: str) -> str:
+    """Infer the best domain routing track from the target job description."""
+    text = job_description.lower()
+    scores: dict[str, int] = {
+        "academic_research": sum(
+            1
+            for kw in (
+                "postdoc", "postdoctoral", "professor", "lecturer", "faculty",
+                "research fellow", "grant", "peer-reviewed", "publications",
+                "university", "department of", "principal investigator", "phd required",
+            )
+            if kw in text
+        ),
+        "physical_engineering": sum(
+            1
+            for kw in (
+                "cfd", "ansys", "thermodynamics", "fluid dynamics", "heat transfer",
+                "aerospace", "aftertreatment", "chemical engineering", "process engineer",
+                "crystallization", "catalytic", "test-rig", "instrumentation", "finite element",
+            )
+            if kw in text
+        ),
+        "ai_ml": sum(
+            1
+            for kw in (
+                "llm", "rlhf", "pytorch", "tensorflow", "machine learning",
+                "deep learning", "foundation model", "ai safety", "mlops",
+                "transformer", "nlp", "computer vision", "generative ai",
+            )
+            if kw in text
+        ),
+        "quant_software": sum(
+            1
+            for kw in (
+                "quantitative", "quant ", "trading", "low-latency", "distributed systems",
+                "backend", "software engineer", "kubernetes", "microservices", "rust",
+                "c++", "fastapi", "postgresql", "devops",
+            )
+            if kw in text
+        ),
+    }
+    best_domain, best_score = max(scores.items(), key=lambda item: item[1])
+    return best_domain if best_score >= 2 else "general_industry"
+
+
+def _build_evidence_section(evidence_chunks: list[dict[str, Any]] | None) -> str:
+    if not evidence_chunks:
+        return ""
+    lines = [
+        "--- VERIFIED EVIDENCE FROM CANDIDATE CORPUS ---",
+        "The excerpts below were retrieved directly from the candidate's uploaded documents "
+        "(papers, project reports, presentations, CVs). Use concrete metrics, project names, "
+        "methodologies, and citations from these excerpts to ground the CV and Cover Letter. "
+        "NEVER fabricate facts outside the Master Profile and Verified Evidence.\n",
+    ]
+    for idx, item in enumerate(evidence_chunks, start=1):
+        source = item.get("source", "Document")
+        excerpt = item.get("excerpt", "").strip()
+        if excerpt:
+            lines.append(f"[{idx}] Source: {source}\n{excerpt}\n")
+    return "\n".join(lines)
+
+
 MASTER_PROMPT_TEMPLATE: str = """\
-You are a professional CV and cover letter writer with expertise in crafting
-ATS-optimized, achievement-focused career documents.  Your task is to produce
-a CV and a cover letter for the candidate described below, tailored to the
-target job description.
+Act as an expert executive recruiter, hiring manager, and ATS (Applicant Tracking
+System) optimization specialist. Your task is to produce a tailored, ATS-compliant
+single-column CV and a compelling single-page Cover Letter grounded strictly in
+the candidate's Master Profile and Verified Evidence below.
 
 --- CANDIDATE MASTER PROFILE ---
 {profile_data}
 
+{evidence_section}
 --- TARGET JOB DESCRIPTION ---
 {job_description}
 
---- ROLE CONTEXT (for tailoring) ---
+--- ROLE CONTEXT & DOMAIN ROUTING ---
 {role_context}
+{domain_guidance}
 
 {jev_context_section}
 
 --- INSTRUCTIONS ---
-1. Study the candidate's master profile above carefully.
-2. Study the job description and role context.
-3. Produce a CV that is:
-   - Tailored to the job description: highlight the most relevant experience,
-     skills, and achievements for THIS role.
-   - Achievement-focused: use metrics, outcomes, and impact where possible.
-     Expand on brief entries from the master profile by turning them into
-     accomplishment statements (e.g., "Improved X by Y%, saving $Z").
-   - ATS-optimized: use standard section headings and keyword-rich language
-     that mirrors the job description.
-   - Honest: do NOT invent facts not supported by the master profile, but you
-     MAY rephrase, expand, and contextualize existing information into strong
-     achievement statements.
-4. Produce a cover letter that:
-   - Opens with a strong, specific hook connecting the candidate to the role.
-   - Body paragraphs connect 2-3 specific achievements to the employer's needs.
-   - Closes with a confident call to action.
-   - Is written in a professional, warm tone appropriate for the industry.
+1. Keyword Extraction & Grounded Matching:
+   - Extract required hard skills, tools, domain keywords, and qualifications from the JD.
+   - Integrate matching keywords naturally without stuffing. NEVER fabricate skills,
+     degrees, metrics, or experiences not present in the Master Profile or Verified Evidence.
+2. Cross-Domain Role Translation (MANDATORY):
+   - For any experience entry from a different sector than the target role, populate
+     its "relevance_note" field (1-2 concise sentences) translating transferable
+     methodologies, systems, and outcomes into the target domain's language.
+3. ATS-Compliant CV Rules:
+   - Single-column structure, reverse-chronological order, standard section headers.
+   - Open with a 3-4 line tailored "summary" synthesizing the candidate's strongest fit.
+   - Start each experience bullet with a strong action verb and concrete outcome/metric
+     drawn from the Master Profile or Verified Evidence.
+4. Single-Page Cover Letter Rules (250-400 words):
+   - Opening: strong, specific hook tied to the employer's mission/JD.
+     DO NOT open with "I am writing to apply for..." or generic filler.
+   - Body: 2-3 concrete technical/domain mappings citing specific projects, papers, or
+     quantified achievements from the Master Profile / Verified Evidence.
+   - Closing: confident, concise call to action and professional sign-off.{output_language}
 
 --- OUTPUT FORMAT ---
 You MUST output your response as a SINGLE JSON object with two top-level keys:
   - "cv": a CV object matching the CV schema below
   - "cover_letter": a cover letter object matching the Cover Letter schema below
 
-The JSON MUST be valid and match the schemas exactly.  Do not include any
+The JSON MUST be valid and match the schemas exactly. Do not include any
 markdown formatting, explanations, or text outside the JSON object.
 
 CV Schema (output "cv" must conform to this):
@@ -376,16 +480,12 @@ def assemble_prompt(
     role_context: str = "",
     output_language: str = "en",
     jev_context: dict[str, Any] | None = None,
+    target_domain: str | None = None,
+    evidence_chunks: list[dict[str, Any]] | None = None,
 ) -> str:
-    """Fill the master prompt template with *profile* and *job_description*.
+    """Fill the master prompt template with *profile*, *evidence_chunks*, and *job_description*.
 
     Returns the system prompt string to send to the LLM.
-
-    If *role_context* is empty, a ``"Currently: ...`` line is auto-derived
-    from the most recent experience entry whose end_date is blank or "Present".
-
-    If *jev_context* is provided, Jev's structured job analysis is inserted
-    into the prompt to guide the LLM's CV generation.
     """
     parts: list[str] = []
 
@@ -435,6 +535,14 @@ def assemble_prompt(
     if not role_context:
         role_context = _infer_current_role(profile) or "No additional role context provided."
 
+    resolved_domain = (
+        target_domain
+        if target_domain in DOMAIN_TRACK_GUIDANCE
+        else detect_target_domain(job_description)
+    )
+    domain_guidance = DOMAIN_TRACK_GUIDANCE[resolved_domain]
+    evidence_section = _build_evidence_section(evidence_chunks)
+
     cv_schema_text = json.dumps(CV_SCHEMA, indent=2)
     cover_schema_text = json.dumps(COVER_LETTER_SCHEMA, indent=2)
 
@@ -443,14 +551,16 @@ def assemble_prompt(
 
     return MASTER_PROMPT_TEMPLATE.format(
         profile_data=profile_text,
+        evidence_section=evidence_section,
         job_description=job_description,
         role_context=role_context,
+        domain_guidance=domain_guidance,
         jev_context_section=jev_section,
         cv_schema=cv_schema_text,
         cover_letter_schema=cover_schema_text,
         output_language=(
-            f"\n\nOUTPUT LANGUAGE: Respond in {LANGUAGE_LABELS.get(output_language, output_language)}. "
-            f"Use {output_language} language for all content."
+            f"\n5. Output Language: Write ALL content in {LANGUAGE_LABELS.get(output_language, output_language)} "
+            f"({output_language}). Keep proper nouns and technical tool names intact."
             if output_language != "en"
             else ""
         ),

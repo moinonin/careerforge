@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -228,3 +228,164 @@ async def import_status(
             "message": "Parse job not found. Upload a CV to start parsing.",
         }
     return job
+
+
+# ── Career Corpus (NotebookLM-style multi-source evidence vault) ──────────────
+
+
+class CorpusQueryRequest(BaseModel):
+    query: str
+    top_k: int = 6
+
+
+@router.get("/{profile_id}/sources", response_model=dict)
+async def list_profile_sources(
+    profile_id: str,
+    current_user_id: CurrentUserId,
+    session: AsyncSession = Depends(get_session),  # noqa: B008
+) -> dict:
+    """List all career corpus sources attached to a profile."""
+    try:
+        profile = await profiles_service.get_profile(session, profile_id, current_user_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+    sources = (profile.get("profile_data") or {}).get("sources") or []
+    summaries = [
+        {
+            "id": s.get("id"),
+            "title": s.get("title"),
+            "source_type": s.get("source_type"),
+            "filename": s.get("filename"),
+            "char_count": s.get("char_count", 0),
+            "chunk_count": len(s.get("chunks") or []),
+            "uploaded_at": s.get("uploaded_at"),
+        }
+        for s in sources
+    ]
+    return {"profile_id": profile_id, "sources": summaries}
+
+
+@router.post("/{profile_id}/sources", status_code=status.HTTP_201_CREATED, response_model=dict)
+async def add_profile_source(
+    profile_id: str,
+    current_user_id: CurrentUserId,
+    file: UploadFile | None = File(None),  # noqa: B008
+    title: str | None = Form(None),
+    text: str | None = Form(None),
+    session: AsyncSession = Depends(get_session),  # noqa: B008
+) -> dict:
+    """Attach a document (PDF/DOCX/PPTX/MD/TXT) or raw text note to a profile's corpus."""
+    from backend.profiles.corpus import build_source_entry, extract_source_text
+
+    if file is None and not (text and text.strip()):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Provide either a file upload or non-empty text.",
+        )
+
+    try:
+        profile = await profiles_service.get_profile(session, profile_id, current_user_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+    if file is not None:
+        raw_bytes = await file.read()
+        if len(raw_bytes) > 10 * 1024 * 1024:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail="Source file exceeds 10 MB limit.",
+            )
+        filename = file.filename or "source.txt"
+        try:
+            extracted = extract_source_text(raw_bytes, filename)
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        if not extracted.strip():
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Could not extract readable text from uploaded file.",
+            )
+        ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "file"
+        entry = build_source_entry(
+            title=title or filename,
+            text=extracted,
+            source_type=ext,
+            filename=filename,
+        )
+    else:
+        entry = build_source_entry(
+            title=title or "Text Note",
+            text=text or "",
+            source_type="text",
+            filename=None,
+        )
+
+    profile_data = dict(profile.get("profile_data") or {})
+    sources = list(profile_data.get("sources") or [])
+    sources.append(entry)
+    profile_data["sources"] = sources
+
+    update_req = profiles_schemas.ProfileUpdateRequest(
+        profile_data=profiles_schemas.MasterProfileData(**profile_data)
+    )
+    await profiles_service.update_profile(session, profile_id, current_user_id, update_req)
+    return {
+        "profile_id": profile_id,
+        "source": {
+            "id": entry["id"],
+            "title": entry["title"],
+            "source_type": entry["source_type"],
+            "filename": entry["filename"],
+            "char_count": entry["char_count"],
+            "chunk_count": len(entry["chunks"]),
+            "uploaded_at": entry["uploaded_at"],
+        },
+    }
+
+
+@router.delete("/{profile_id}/sources/{source_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_profile_source(
+    profile_id: str,
+    source_id: str,
+    current_user_id: CurrentUserId,
+    session: AsyncSession = Depends(get_session),  # noqa: B008
+) -> None:
+    """Remove a source document from a profile's career corpus."""
+    try:
+        profile = await profiles_service.get_profile(session, profile_id, current_user_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+    profile_data = dict(profile.get("profile_data") or {})
+    sources = list(profile_data.get("sources") or [])
+    remaining = [s for s in sources if s.get("id") != source_id]
+    if len(remaining) == len(sources):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source not found.")
+
+    profile_data["sources"] = remaining
+    update_req = profiles_schemas.ProfileUpdateRequest(
+        profile_data=profiles_schemas.MasterProfileData(**profile_data)
+    )
+    await profiles_service.update_profile(session, profile_id, current_user_id, update_req)
+
+
+@router.post("/{profile_id}/sources/query", response_model=dict)
+async def query_profile_sources(
+    profile_id: str,
+    body: CorpusQueryRequest,
+    current_user_id: CurrentUserId,
+    session: AsyncSession = Depends(get_session),  # noqa: B008
+) -> dict:
+    """Preview top-K grounded evidence excerpts from the profile corpus for a JD/query."""
+    from backend.profiles.corpus import retrieve_relevant_evidence
+
+    try:
+        profile = await profiles_service.get_profile(session, profile_id, current_user_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+    sources = (profile.get("profile_data") or {}).get("sources") or []
+    top_k = max(1, min(int(body.top_k), 12))
+    matches = retrieve_relevant_evidence(sources, body.query, top_k=top_k)
+    return {"profile_id": profile_id, "query": body.query, "matches": matches}

@@ -81,6 +81,7 @@ async def run_generation(
     provider: str | None = None,
     model: str | None = None,
     jev_context: dict[str, Any] | None = None,
+    target_domain: str | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Run the LLM generation for *job*.
 
@@ -102,15 +103,24 @@ async def run_generation(
     if not isinstance(profile_data, dict) or not profile_data:
         raise ValueError(f"Profile {job.profile_id} has no profile_data")
 
-    # 2. Build the prompt
+    # 2. Build the prompt with NotebookLM-style grounded corpus retrieval
+    from backend.profiles.corpus import retrieve_relevant_evidence
     from backend.profiles.schemas import MasterProfileData
 
     profile = MasterProfileData(**profile_data)
+    raw_sources = profile_data.get("sources") or []
+    evidence_chunks = (
+        retrieve_relevant_evidence(raw_sources, job.job_description, top_k=6)
+        if isinstance(raw_sources, list) and raw_sources
+        else None
+    )
     prompt = assemble_prompt(
         profile=profile,
         job_description=job.job_description,
         output_language=job.output_language,
         jev_context=jev_context,
+        target_domain=target_domain,
+        evidence_chunks=evidence_chunks,
     )
 
     # 3. Resolve credentials (DB-driven for Sprint 6; env-driven fallback),

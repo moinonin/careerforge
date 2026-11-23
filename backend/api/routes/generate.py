@@ -65,6 +65,7 @@ class GenerationRequest(BaseModel):
     job_title: str | None = None
     company_name: str | None = None
     output_language: str = "en"  # en, es, de, fr, fi
+    target_domain: str | None = None  # academic_research | physical_engineering | quant_software | ai_ml | general_industry
     jev_analysis: dict[str, Any] | None = None
     """Optional Jev structured analysis to guide CV generation."""
 
@@ -242,6 +243,7 @@ async def _run_generation_inline(
     provider: str | None = None,
     model: str | None = None,
     jev_context: dict[str, Any] | None = None,
+    target_domain: str | None = None,
 ) -> dict[str, Any]:
     """Run generation inline (within the request) and return the result payload.
 
@@ -252,12 +254,18 @@ async def _run_generation_inline(
     from backend.llm.pdf_renderer import await_convert as pdf_convert
     from backend.models import User
 
+    gen_kwargs: dict[str, Any] = {
+        "provider": provider,
+        "model": model,
+        "jev_context": jev_context,
+    }
+    if target_domain is not None:
+        gen_kwargs["target_domain"] = target_domain
+
     cv, cover_letter = await run_generation(
         session,
         job,
-        provider=provider,
-        model=model,
-        jev_context=jev_context,
+        **gen_kwargs,
     )
 
     cv_markdown = render_cv_markdown(cv)
@@ -394,6 +402,7 @@ async def start_generation(
     provider = request.get("provider")
     model = request.get("model")
     output_language = request.get("output_language", "en")
+    target_domain = request.get("target_domain")
     jev_analysis = request.get("jev_analysis")
 
     if output_language not in SUPPORTED_LANGUAGES:
@@ -465,6 +474,7 @@ async def start_generation(
             provider=provider,
             model=model,
             jev_context=jev_analysis,
+            target_domain=target_domain,
         )
     except GenerationError as exc:
         await mark_job_failed(session, job.id, str(exc))

@@ -6,7 +6,8 @@ from __future__ import annotations
 from typing import Any
 
 from backend.database import get_session
-from backend.jev import JevAnalysis, JevClient
+from backend.jev import JevAnalysis
+from backend.s1 import get_decision_client
 from backend.llm.adapter import GenerationError
 from backend.llm.router import build_adapter
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -120,7 +121,7 @@ async def _run_jev_analyzer(
     jev_raw: dict[str, Any] = {}
 
     try:
-        async with JevClient() as client:
+        async with get_decision_client() as client:
             jev_analysis = await client.analyze_job(job_description, company_name)
             jev_raw = jev_analysis.to_context_dict()
     except RuntimeError:

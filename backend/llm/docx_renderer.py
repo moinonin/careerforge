@@ -30,24 +30,10 @@ TEXT_COLOR = RGBColor(0x1F, 0x29, 0x37)       # #1F2937 - Dark gray (not black)
 LIGHT_TEXT_COLOR = RGBColor(0x6B, 0x72, 0x80) # #6B7280 - Medium gray
 DIVIDER_COLOR = RGBColor(0xD1, 0xD5, 0xDB)    # #D1D5DB - Light gray
 
-# Cross-platform font stack
-FONT_STACK = [
-    "Calibri",           # Windows default
-    "Liberation Sans",   # Linux (LibreOffice default)
-    "DejaVu Sans",       # Cross-platform
-    "Helvetica Neue",    # macOS
-    "Arial",             # Universal fallback
-]
-FONT_NAME = ", ".join(FONT_STACK)
-
-MONOSPACE_FONT_STACK = [
-    "Consolas",
-    "Liberation Mono",
-    "DejaVu Sans Mono",
-    "Menlo",
-    "Monospace",
-]
-MONOSPACE_FONT = ", ".join(MONOSPACE_FONT_STACK)
+# Single real font name (Word/LibreOffice XML does not parse CSS comma-separated font stacks;
+# LibreOffice maps Calibri 1:1 to metric-compatible Carlito for crisp PDF rendering).
+FONT_NAME = "Calibri"
+MONOSPACE_FONT = "Consolas"
 
 
 # ════════════════════════════════════════════════════════════════════════════════
@@ -74,16 +60,16 @@ class TemplateConfig:
 TEMPLATES = {
     "modern": TemplateConfig(
         name="Modern",
-        primary_color=BRAND_COLOR,
-        secondary_color=ACCENT_COLOR,
-        heading_font_size=12,
-        body_font_size=11,
-        name_font_size=26,
-        margin_inches=0.8,
+        primary_color=RGBColor(0x1E, 0x3A, 0x8A),  # Deep executive navy
+        secondary_color=BRAND_COLOR_DARK,
+        heading_font_size=11,
+        body_font_size=10,
+        name_font_size=22,
+        margin_inches=0.65,
         line_spacing=1.15,
         use_horizontal_rules=True,
         use_shaded_sections=False,
-        skills_layout="badges",
+        skills_layout="inline",
         header_style="centered",
     ),
     "classic": TemplateConfig(
@@ -203,13 +189,34 @@ def _add_shaded_paragraph(doc: Document, text: str, shade_color: RGBColor,
 
 
 def _format_dates(start: str | None, end: str | None) -> str:
-    """Return formatted date range."""
-    if not start:
+    """Return formatted date range including start_date."""
+    start_s = (start or "").strip()
+    end_s = (end or "").strip()
+    if not start_s and not end_s:
         return ""
-    end_clean = (end or "").strip().lower()
-    if end_clean in ("", "present", "now", "current"):
-        return " – Present"
-    return f" – {end}"
+    if not start_s:
+        return end_s
+    if end_s.lower() in ("", "present", "now", "current"):
+        return f"{start_s} – Present"
+    return f"{start_s} – {end_s}"
+
+
+def _add_section_heading(doc: Document, title: str, template: TemplateConfig) -> Any:
+    """Add a crisp section heading (styled uppercase via all_caps) with a hairline bottom border."""
+    p = doc.add_paragraph(title, style="CV Section")
+    p.paragraph_format.keep_with_next = True
+    if template.use_horizontal_rules:
+        pPr = p._p.get_or_add_pPr()
+        pBdr = OxmlElement("w:pBdr")
+        bottom = OxmlElement("w:bottom")
+        bottom.set(qn("w:val"), "single")
+        bottom.set(qn("w:sz"), "6")
+        bottom.set(qn("w:space"), "2")
+        color = template.primary_color
+        bottom.set(qn("w:color"), f"{color[0]:02X}{color[1]:02X}{color[2]:02X}")
+        pBdr.append(bottom)
+        pPr.append(pBdr)
+    return p
 
 
 def _setup_document_styles(doc: Document, template: TemplateConfig) -> None:
@@ -230,6 +237,7 @@ def _setup_document_styles(doc: Document, template: TemplateConfig) -> None:
         h1.font.name = FONT_NAME
         h1.font.size = Pt(template.heading_font_size)
         h1.font.bold = True
+        h1.font.all_caps = True
         h1.font.color.rgb = template.primary_color
         h1.paragraph_format.space_before = Pt(12)
         h1.paragraph_format.space_after = Pt(6)
@@ -365,6 +373,9 @@ class DocxRenderer:
         if self.template.header_style == "centered":
             p = doc.add_paragraph(full_name, style="CV Name")
             p.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            p_contact = doc.add_paragraph(style="CV Contact")
+            p_contact.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            self._add_contact_line(p_contact, contact)
         elif self.template.header_style == "split":
             # Name left, contact right
             table = doc.add_table(rows=1, cols=2)
@@ -435,7 +446,7 @@ class DocxRenderer:
         summary = cv.get("summary", "")
         if not summary:
             return
-        doc.add_paragraph("Professional Summary", style="CV Section")
+        _add_section_heading(doc, "Professional Summary", self.template)
         doc.add_paragraph(summary, style="CV Body")
 
     def _render_skills(self, doc: Document, cv: dict[str, Any]) -> None:
@@ -450,7 +461,7 @@ class DocxRenderer:
         if not has_any:
             return
 
-        doc.add_paragraph("Core Competencies", style="CV Section")
+        _add_section_heading(doc, "Core Competencies", self.template)
 
         if self.template.skills_layout == "badges":
             # Badge-style skills in a table
@@ -537,7 +548,7 @@ class DocxRenderer:
         experience = cv.get("experience", [])
         if not experience:
             return
-        doc.add_paragraph("Professional Experience", style="CV Section")
+        _add_section_heading(doc, "Professional Experience", self.template)
 
         for exp in experience:
             role = exp.get("role", "")
@@ -545,27 +556,30 @@ class DocxRenderer:
             if not role and not company:
                 continue
 
-            # Role + Company line
-            parts = []
-            if role:
-                parts.append(role)
-            if company:
-                parts.append(f"at {company}")
-            loc = exp.get("location")
-            if loc:
-                parts.append(loc)
+            # Role + Company | Location | Dates
+            p = doc.add_paragraph()
+            p.paragraph_format.space_before = Pt(7)
+            p.paragraph_format.space_after = Pt(2)
+            p.paragraph_format.keep_with_next = True
+
+            title_str = f"{role} — {company}" if (role and company) else (role or company)
+            run_title = p.add_run(title_str)
+            run_title.bold = True
+            run_title.font.name = FONT_NAME
+            run_title.font.size = Pt(self.template.body_font_size)
+            run_title.font.color.rgb = TEXT_COLOR
+
+            meta_parts = []
+            if exp.get("location"):
+                meta_parts.append(str(exp["location"]))
             dates = _format_dates(exp.get("start_date"), exp.get("end_date"))
             if dates:
-                parts.append(dates.strip())
-
-            p = doc.add_paragraph()
-            p.paragraph_format.space_before = Pt(8)
-            p.paragraph_format.space_after = Pt(2)
-            run = p.add_run("  ".join(parts))
-            run.bold = True
-            run.font.name = FONT_NAME
-            run.font.size = Pt(self.template.body_font_size)
-            run.font.color.rgb = self.template.primary_color
+                meta_parts.append(dates)
+            if meta_parts:
+                run_meta = p.add_run("  |  " + "  |  ".join(meta_parts))
+                run_meta.font.name = FONT_NAME
+                run_meta.font.size = Pt(self.template.body_font_size - 0.5)
+                run_meta.font.color.rgb = LIGHT_TEXT_COLOR
 
             # Relevance note
             relevance = exp.get("relevance_note", "")
@@ -573,25 +587,26 @@ class DocxRenderer:
                 p_rel = doc.add_paragraph()
                 p_rel.paragraph_format.space_before = Pt(0)
                 p_rel.paragraph_format.space_after = Pt(2)
-                p_rel.paragraph_format.left_indent = Cm(0.5)
+                p_rel.paragraph_format.left_indent = Cm(0.35)
                 run = p_rel.add_run(f"Relevance: {relevance}")
                 run.italic = True
-                run.font.size = Pt(self.template.body_font_size - 1)
+                run.font.size = Pt(self.template.body_font_size - 0.5)
                 run.font.name = FONT_NAME
                 run.font.color.rgb = LIGHT_TEXT_COLOR
 
-            # Bullets
+            # Bullets with crisp bullet character and hanging indent
             for b in exp.get("bullets", []):
                 if b:
-                    p_bullet = doc.add_paragraph(b, style="CV Bullet")
-                    # Add custom bullet character
-                    p_bullet.paragraph_format.first_line_indent = Cm(-0.75)
+                    text_b = str(b).lstrip("•-* ").strip()
+                    p_bullet = doc.add_paragraph(f"•  {text_b}", style="CV Bullet")
+                    p_bullet.paragraph_format.left_indent = Cm(0.55)
+                    p_bullet.paragraph_format.first_line_indent = Cm(-0.35)
 
     def _render_education(self, doc: Document, cv: dict[str, Any]) -> None:
         education = cv.get("education", [])
         if not education:
             return
-        doc.add_paragraph("Education", style="CV Section")
+        _add_section_heading(doc, "Education", self.template)
 
         for edu in education:
             degree = edu.get("degree", "")
@@ -599,55 +614,55 @@ class DocxRenderer:
             if not degree and not institution:
                 continue
 
-            parts = []
-            if degree:
-                parts.append(degree)
-            if institution:
-                parts.append(f"at {institution}")
-            loc = edu.get("location")
-            if loc:
-                parts.append(loc)
-            dates = _format_dates(edu.get("start_date"), edu.get("end_date"))
-            if dates:
-                parts.append(dates.strip())
-
             p = doc.add_paragraph()
             p.paragraph_format.space_before = Pt(6)
             p.paragraph_format.space_after = Pt(1)
-            run = p.add_run("  ".join(parts))
+            p.paragraph_format.keep_with_next = True
+
+            title_str = f"{degree} — {institution}" if (degree and institution) else (degree or institution)
+            run = p.add_run(title_str)
             run.bold = True
             run.font.name = FONT_NAME
             run.font.size = Pt(self.template.body_font_size)
-            run.font.color.rgb = self.template.primary_color
+            run.font.color.rgb = TEXT_COLOR
+
+            meta_parts = []
+            if edu.get("location"):
+                meta_parts.append(str(edu["location"]))
+            dates = _format_dates(edu.get("start_date"), edu.get("end_date"))
+            if dates:
+                meta_parts.append(dates)
+            if meta_parts:
+                run_meta = p.add_run("  |  " + "  |  ".join(meta_parts))
+                run_meta.font.name = FONT_NAME
+                run_meta.font.size = Pt(self.template.body_font_size - 0.5)
+                run_meta.font.color.rgb = LIGHT_TEXT_COLOR
 
             thesis = edu.get("thesis", "")
             if thesis:
                 p_thesis = doc.add_paragraph()
                 p_thesis.paragraph_format.space_before = Pt(0)
                 p_thesis.paragraph_format.space_after = Pt(2)
-                p_thesis.paragraph_format.left_indent = Cm(0.5)
+                p_thesis.paragraph_format.left_indent = Cm(0.35)
                 run = p_thesis.add_run(f"Thesis: {thesis}")
                 run.italic = True
-                run.font.size = Pt(self.template.body_font_size - 1)
+                run.font.size = Pt(self.template.body_font_size - 0.5)
                 run.font.name = FONT_NAME
                 run.font.color.rgb = LIGHT_TEXT_COLOR
 
-            for d in edu.get("details", []):
-                if d:
-                    p_detail = doc.add_paragraph()
-                    p_detail.paragraph_format.space_before = Pt(0)
-                    p_detail.paragraph_format.space_after = Pt(1)
-                    p_detail.paragraph_format.left_indent = Cm(0.5)
-                    run = p_detail.add_run(f"• {d}")
-                    run.font.size = Pt(self.template.body_font_size)
-                    run.font.name = FONT_NAME
-                    run.font.color.rgb = TEXT_COLOR
+            raw_details = edu.get("details")
+            details_list = [raw_details] if isinstance(raw_details, str) else (raw_details or [])
+            for d in details_list:
+                if d and str(d).strip():
+                    p_detail = doc.add_paragraph(f"•  {str(d).lstrip('•-* ').strip()}", style="CV Bullet")
+                    p_detail.paragraph_format.left_indent = Cm(0.55)
+                    p_detail.paragraph_format.first_line_indent = Cm(-0.35)
 
     def _render_projects(self, doc: Document, cv: dict[str, Any]) -> None:
         projects = cv.get("projects", [])
         if not projects:
             return
-        doc.add_paragraph("Projects", style="CV Section")
+        _add_section_heading(doc, "Projects", self.template)
 
         for proj in projects:
             name = proj.get("name", "")
@@ -699,24 +714,27 @@ class DocxRenderer:
         publications = cv.get("publications", [])
         if not publications:
             return
-        doc.add_paragraph("Publications", style="CV Section")
+        _add_section_heading(doc, "Publications", self.template)
         for pub in publications:
-            citation = pub.get("citation", "")
+            citation = str(pub.get("citation", "")).strip()
             if not citation:
                 continue
-            p = doc.add_paragraph()
-            p.paragraph_format.space_before = Pt(3)
-            p.paragraph_format.space_after = Pt(1)
-            run = p.add_run(citation)
-            run.font.name = FONT_NAME
-            run.font.size = Pt(self.template.body_font_size)
-            run.font.color.rgb = TEXT_COLOR
+            year = pub.get("year")
+            doi = str(pub.get("doi", "") or "").strip()
+            line = citation
+            if year and str(year) not in line:
+                line += f" ({year})"
+            if doi and doi not in line:
+                line += f" — DOI: {doi}"
+            p = doc.add_paragraph(f"•  {line}", style="CV Bullet")
+            p.paragraph_format.left_indent = Cm(0.55)
+            p.paragraph_format.first_line_indent = Cm(-0.35)
 
     def _render_certifications(self, doc: Document, cv: dict[str, Any]) -> None:
         certifications = cv.get("certifications", [])
         if not certifications:
             return
-        doc.add_paragraph("Certifications", style="CV Section")
+        _add_section_heading(doc, "Certifications", self.template)
         for cert in certifications:
             name = cert.get("name", "")
             if not name:
@@ -740,30 +758,21 @@ class DocxRenderer:
         languages = cv.get("languages", [])
         if not languages:
             return
-        doc.add_paragraph("Languages", style="CV Section")
+        _add_section_heading(doc, "Languages", self.template)
+        entries = []
         for lang in languages:
-            language = lang.get("language", "")
-            proficiency = lang.get("proficiency", "")
+            language = str(lang.get("language", "")).strip()
+            proficiency = str(lang.get("proficiency", "")).strip()
             if language:
-                p = doc.add_paragraph()
-                p.paragraph_format.space_before = Pt(1)
-                p.paragraph_format.space_after = Pt(1)
-                run = p.add_run(f"{language}")
-                run.bold = True
-                run.font.name = FONT_NAME
-                run.font.size = Pt(self.template.body_font_size)
-                run.font.color.rgb = TEXT_COLOR
-                if proficiency:
-                    run2 = p.add_run(f" — {proficiency}")
-                    run2.font.name = FONT_NAME
-                    run2.font.size = Pt(self.template.body_font_size)
-                    run2.font.color.rgb = LIGHT_TEXT_COLOR
+                entries.append(f"{language} ({proficiency})" if proficiency else language)
+        if entries:
+            doc.add_paragraph("  |  ".join(entries), style="CV Body")
 
     def _render_additional_info(self, doc: Document, cv: dict[str, Any]) -> None:
         addl = cv.get("additional_info", "")
         if not addl:
             return
-        doc.add_paragraph("Additional Information", style="CV Section")
+        _add_section_heading(doc, "Additional Information", self.template)
         doc.add_paragraph(addl, style="CV Body")
 
 

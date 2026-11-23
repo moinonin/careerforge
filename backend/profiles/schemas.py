@@ -84,6 +84,20 @@ class ProjectEntry(BaseModel):
     link: str | None = Field(None, max_length=500)
 
 
+class ProfileSourceEntry(BaseModel):
+    """Uploaded career corpus document (paper, report, slide deck, CV, note)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    id: str = Field("", max_length=64)
+    title: str = Field("", max_length=255)
+    source_type: str = Field("text", max_length=50)
+    filename: str | None = Field(None, max_length=255)
+    char_count: int = Field(0, ge=0)
+    chunks: list[str] = Field(default_factory=list)
+    uploaded_at: str = Field("", max_length=64)
+
+
 def _empty_contact() -> ContactInfo:
     return ContactInfo(
         full_name="",
@@ -118,6 +132,7 @@ class MasterProfileData(BaseModel):
     certifications: list[CertificationEntry] = Field(default_factory=list)
     languages: list[LanguageEntry] = Field(default_factory=list)
     projects: list[ProjectEntry] = Field(default_factory=list)
+    sources: list[ProfileSourceEntry] = Field(default_factory=list)
     additional_info: str = Field("", max_length=2000)
 
 
